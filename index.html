@@ -77,6 +77,22 @@
             margin-right: 5px;
             vertical-align: middle;
         }
+        #model-info-container {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background-color: rgba(40, 40, 50, 0.75);
+            padding: 8px 12px;
+            border-radius: 6px;
+            z-index: 60;
+            color: #e0e0e0;
+            font-size: 14px;
+            display: none; /* Hidden until a model is loaded */
+            max-width: calc(100vw - 250px); /* Avoid overlapping with controls panel */
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
 
     </style>
 </head>
@@ -88,6 +104,10 @@
         </div>
     </div>
     <div id="drop-zone-text">Drop .drc file here</div>
+
+    <div id="model-info-container">
+        Current Model: <span id="current-model-name"></span>
+    </div>
 
     <div id="controls-panel" style="display: none;"> <!-- Hidden until model loads -->
         <h3>Viewer Controls</h3>
@@ -115,6 +135,8 @@
         const progressBar = document.getElementById('progress-bar');
         const dropZoneText = document.getElementById('drop-zone-text');
         const controlsPanel = document.getElementById('controls-panel');
+        const modelInfoContainer = document.getElementById('model-info-container');
+        const currentModelNameSpan = document.getElementById('current-model-name');
 
         const dracoLoader = new DRACOLoader();
         dracoLoader.setDecoderPath('https://www.gstatic.com/draco/versioned/decoders/1.5.6/');
@@ -172,21 +194,41 @@
 
             // Determine model to load from URL parameter or use default
             let modelToLoad = 'model.drc'; // Default model if no other instruction
-            let initialMessage = `Attempting to load default model: ${modelToLoad}`;
+            let displayName = "Default Model (model.drc)";
+            let displayPath = "model.drc"; // For the info container
+            let initialMessage = `Attempting to load ${displayName}`;
 
             const urlParams = new URLSearchParams(window.location.search);
             const modelFromURL = urlParams.get('model');
+            const originalFilenameFromURL = urlParams.get('originalFilename');
+            const originalFullPathFromURL = urlParams.get('originalFullPath');
 
             if (modelFromURL) {
                 modelToLoad = decodeURIComponent(modelFromURL);
-                initialMessage = `Loading model: ${modelToLoad}`;
-                console.log("Loading model from 'model' URL parameter:", modelToLoad);
+                if (originalFilenameFromURL) {
+                    displayName = decodeURIComponent(originalFilenameFromURL); // Used for page title
+                } else if (modelToLoad === '_active_model.drc') {
+                    displayName = "Active Model"; 
+                } else {
+                    displayName = modelToLoad;
+                }
+
+                if (originalFullPathFromURL) {
+                    displayPath = decodeURIComponent(originalFullPathFromURL); // Used for info container
+                } else {
+                    displayPath = displayName; // Fallback to displayName if full path isn't provided
+                }
+                
+                initialMessage = `Loading: ${displayName}`;
+                console.log("Loading model from 'model' URL parameter:", modelToLoad, "Display name:", displayName, "Display path:", displayPath);
             } else {
+                displayPath = "model.drc"; // Default display path
                 console.log("No 'model' URL parameter, will attempt to load default:", modelToLoad);
             }
-
+            
+            document.title = `Draco Viewer - ${displayName}`;
             updateLoadingProgress(initialMessage, 0);
-            loadDracoModel(modelToLoad); // Attempt to load whatever modelToLoad is set to
+            loadDracoModel(modelToLoad, displayPath); // Pass displayPath to be shown in info container
 
             window.addEventListener('resize', onWindowResize, false);
         }
@@ -200,6 +242,7 @@
         function hideLoadingIndicator() {
             loadingContainer.style.display = 'none';
             controlsPanel.style.display = 'block';
+            // modelInfoContainer display is handled by loadDracoModel's onLoad
         }
 
         function showError(message) {
@@ -207,6 +250,7 @@
             progressBar.style.width = '0%';
             console.error(message);
             controlsPanel.style.display = 'none';
+            modelInfoContainer.style.display = 'none';
         }
         
         function clearScene() {
@@ -216,11 +260,26 @@
                 modelMesh.material.dispose();
                 modelMesh = null;
             }
+            modelInfoContainer.style.display = 'none';
+            currentModelNameSpan.textContent = '';
+            currentModelNameSpan.title = ''; // Clear tooltip
+            document.title = "Draco Viewer";
         }
 
-        function loadDracoModel(source) {
+        function loadDracoModel(source, displayInfo) { // Renamed displayName to displayInfo
             clearScene();
-            updateLoadingProgress('Preparing to load...', 0);
+            
+            const loadingMessage = displayInfo ? `Preparing to load ${displayInfo}...` : 'Preparing to load...';
+            updateLoadingProgress(loadingMessage, 0);
+
+            // Set page title based on displayInfo if it's likely a filename, or a generic part of it
+            if(displayInfo) {
+                let titleName = displayInfo;
+                if (displayInfo.includes('/')) { // If it's a path
+                    titleName = displayInfo.split('/').pop(); // Get basename for title
+                }
+                document.title = `Draco Viewer - ${titleName}`;
+            }
 
             const onLoad = function (geometry) {
                 updateLoadingProgress('Decoding complete. Building scene...', 100);
@@ -279,6 +338,18 @@
                     directionalLight.target = modelMesh;
                     
                     hideLoadingIndicator();
+                    if (displayInfo) {
+                        currentModelNameSpan.textContent = displayInfo;
+                        currentModelNameSpan.title = displayInfo; // Set tooltip to the full info
+                        modelInfoContainer.style.display = 'block';
+                    } else if (typeof source === 'string' && source !== '_active_model.drc') {
+                        // Fallback for direct URL or default model if displayInfo wasn't explicitly passed
+                        currentModelNameSpan.textContent = source;
+                        currentModelNameSpan.title = source;
+                        modelInfoContainer.style.display = 'block';
+                    } else {
+                        modelInfoContainer.style.display = 'none';
+                    }
                     renderScene();
                 }, 10);
             };
@@ -360,7 +431,10 @@
                     if (file.name.toLowerCase().endsWith('.drc')) {
                         const reader = new FileReader();
                         reader.onload = function(e) {
-                            loadDracoModel(e.target.result);
+                            const droppedFilename = file.name;
+                            // For drag-and-drop, we only have the filename, not the full path
+                            document.title = `Draco Viewer - ${droppedFilename}`;
+                            loadDracoModel(e.target.result, droppedFilename); // Pass filename as displayInfo
                         };
                         reader.onerror = function(e) {
                             showError('Error reading file.');

@@ -99,7 +99,7 @@ if ! ss -tulnp | grep -q ":\$SERVER_PORT" && [ -f "\$VIEWER_INSTALL_DIR/start.sh
     # Start server in background, ensuring it runs from the correct directory
     (cd "\$VIEWER_INSTALL_DIR" && ./start.sh &)
     # Give server a moment to start. Adjust if needed.
-    sleep 2
+    sleep 1
     # Check again
     if ! ss -tulnp | grep -q ":\$SERVER_PORT"; then
         echo "DRC Viewer: Failed to start server or server is not listening on port \$SERVER_PORT."
@@ -120,7 +120,11 @@ if [[ "\$INPUT_FILE_URI" == file://* ]]; then
     MODEL_FILE_PATH=\$(echo "\$INPUT_FILE_URI" | sed 's|^file://||')
     MODEL_FILE_PATH=\$(printf '%b' "\${MODEL_FILE_PATH//%/\\\\x}") # URL decode path
 else
-    MODEL_FILE_PATH="\$INPUT_FILE_URI"
+    MODEL_FILE_PATH="\$INPUT_FILE_URI" # Assume it's already a path
+    # If it's a relative path, make it absolute
+    if [[ ! "\$MODEL_FILE_PATH" = /* ]]; then
+        MODEL_FILE_PATH="\$(pwd)/\$MODEL_FILE_PATH"
+    fi
 fi
 
 if [ ! -f "\$MODEL_FILE_PATH" ]; then
@@ -136,10 +140,27 @@ if [ \$? -ne 0 ]; then
     exit 1
 fi
 
-# Open the browser to index.html with the specific model passed as a URL parameter.
-# The model name for the URL parameter should be URL encoded if it contains special characters.
-# Since we are using a fixed name "_active_model.drc", direct use is fine.
-xdg-open "\$SERVER_URL/?model=\$TARGET_MODEL_NAME" &> /dev/null
+# Get the basename of the original file for display purposes
+ORIGINAL_BASENAME=\$(basename "\$MODEL_FILE_PATH")
+ENCODED_ORIGINAL_BASENAME=""
+ENCODED_ORIGINAL_FULLPATH=""
+
+# URL-encode the original basename
+if command -v python3 &> /dev/null; then
+    ENCODED_ORIGINAL_BASENAME=\$(python3 -c "import urllib.parse; print(urllib.parse.quote_plus('\$ORIGINAL_BASENAME'))")
+    ENCODED_ORIGINAL_FULLPATH=\$(python3 -c "import urllib.parse; print(urllib.parse.quote_plus('\$MODEL_FILE_PATH'))")
+elif command -v python &> /dev/null; then
+    ENCODED_ORIGINAL_BASENAME=\$(python -c "import urllib; print(urllib.quote_plus('\$ORIGINAL_BASENAME'))")
+    ENCODED_ORIGINAL_FULLPATH=\$(python -c "import urllib; print(urllib.quote_plus('\$MODEL_FILE_PATH'))")
+else
+    # Basic fallback
+    ENCODED_ORIGINAL_BASENAME="\$(echo "\$ORIGINAL_BASENAME" | sed 's|%|%25|g; s| |%20|g; s|#|%23|g; s|&|%26|g; s|+|%2B|g; s|?|%3F|g; s|=|%3D|g')"
+    ENCODED_ORIGINAL_FULLPATH="\$(echo "\$MODEL_FILE_PATH" | sed 's|%|%25|g; s| |%20|g; s|#|%23|g; s|&|%26|g; s|+|%2B|g; s|?|%3F|g; s|=|%3D|g')"
+fi
+
+# Open the browser to index.html with the specific model passed as a URL parameter,
+# and the original filename and full path for display.
+xdg-open "\$SERVER_URL/?model=\$TARGET_MODEL_NAME&originalFilename=\$ENCODED_ORIGINAL_BASENAME&originalFullPath=\$ENCODED_ORIGINAL_FULLPATH" &> /dev/null
 
 # Note: This script assumes the web server (e.g. from start.sh in \$VIEWER_INSTALL_DIR)
 # is already running and serving files from \$VIEWER_INSTALL_DIR.
