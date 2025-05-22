@@ -1,58 +1,71 @@
 # Readme
-A simple web-based viewer for Draco (.drc) 3D models, featuring dynamic lighting (shading) and basic viewing controls. It allows users to load models via drag-and-drop, or by opening `.drc` files directly from the file manager after installation (which will prompt for drag-and-drop).
+A simple web-based viewer for Draco (.drc) 3D models, featuring dynamic lighting (shading) and basic viewing controls. 
+It allows users to load models via drag-and-drop. For local setups, it supports opening `.drc` files directly from the file manager after installation.
 
 ## Features
 
-*   Loads and displays `.drc` (Draco compressed) 3D models via drag-and-drop.
+*   Loads and displays `.drc` (Draco compressed) 3D models.
 *   Basic orbital camera controls (zoom, pan, rotate).
 *   Dynamic lighting that follows the camera.
 *   Togglable ground plane, wireframe mode, and backface culling.
-*   Desktop integration (via `create.sh`): double-clicking a `.drc` file opens the viewer and indicates which file was selected, prompting the user to then drag-and-drop it.
+*   Drag-and-drop support for `.drc` files directly onto the browser window.
+*   Desktop integration (via `install.sh`):
+    *   **Local Server:** Double-clicking a `.drc` file directly loads the model in the viewer.
+    *   **Remote Server:** Double-clicking opens the viewer URL; user must then drag-and-drop the file.
 
 ## Setup and Installation (Linux Desktop Integration)
 
-The `create.sh` script sets up desktop integration (e.g., for Nautilus on Ubuntu) to recognize `.drc` files.
+The `install.sh` script sets up desktop integration for `.drc` files.
 
-**Prerequisites**:
-*   You must have a web server configured to serve the `index.html` file. The `start.sh` script (a simple Python HTTP server) is provided for local testing.
-*   Place `index.html` (and `model.drc` if you want a default model) in the root directory of your web server.
+**Prerequisites for Local Direct Open:**
+*   The script assumes `index.html`, `start.sh`, and (optionally) `drc-viewer.png` are in the same directory as `install.sh` when you run it.
+*   These files (`index.html`, `start.sh`) will be symlinked into `~/.local/share/drc-viewer/`. **The original source directory must remain accessible for these symlinks to work.**
+*   If you want a default model when opening the base URL, place or symlink `model.drc` into `~/.local/share/drc-viewer/`.
 
 **Installation Steps**:
-1.  **Make `create.sh` executable**:
+1.  **Make `install.sh` executable**:
     ```bash
-    chmod +x create.sh
+    chmod +x install.sh
     ```
 2.  **Run the installation script**:
     ```bash
-    ./create.sh
+    ./install.sh
     ```
     This script will:
-    *   Create a directory `~/.local/share/drc-viewer/` primarily for a launcher script. It no longer copies `index.html` or `model.drc`.
-    *   Create the launcher script `~/.local/share/drc-viewer/drc-viewer-launcher.sh`.
-    *   Set up a `.desktop` file in `~/.local/share/applications/`.
-    *   Define a custom MIME type for `.drc` files in `~/.local/share/mime/packages/`.
-    *   Update your user's MIME database.
-    *   Attempt to set the viewer as the default application for `.drc` files.
+    *   Create `~/.local/share/drc-viewer/`.
+    *   Symlink `start.sh` and `index.html` from your source directory to `~/.local/share/drc-viewer/`.
+    *   Copy `drc-viewer.png` (if present) as the icon.
+    *   Create a launcher script `~/.local/share/drc-viewer/drc-viewer-launcher.sh` which attempts to start the local server if not running, and symlinks the selected `.drc` file for viewing.
+    *   Set up a `.desktop` file and custom MIME type.
 
     You might need to log out and log back in for all changes (especially MIME type associations and icons) to take full effect.
-    Ensure the `SERVER_URL` in `~/.local/share/drc-viewer/drc-viewer-launcher.sh` points to where your `index.html` is served. By default, it's `http://0.0.0.0:8090`.
 
 ## Running the Viewer
 
-1.  **Start your web server**:
-    *   Ensure `index.html` is in your server's document root.
-    *   If using the provided `start.sh` for local testing:
-        Navigate to the directory containing your `index.html` and run:
-        ```bash
-        ~/.local/share/drc-viewer/start.sh 
-        # Or, if start.sh was copied from source to your project dir: ./start.sh
-        ```
-        This typically starts a server on `http://0.0.0.0:8090`. Keep this terminal open.
+**A. Local Server with Direct File Open:**
 
+1.  **Run `install.sh`**: This will set up symlinks for `index.html` and `start.sh` in `~/.local/share/drc-viewer/`.
 2.  **Open `.drc` files**:
-    *   **From File Manager**: After running `create.sh`, double-click any `.drc` file. Your default web browser should open to the viewer URL. The viewer will display a message indicating which file was selected. **Due to browser security restrictions, you will then need to drag and drop that same `.drc` file into the browser window to load it.**
-    *   **Drag and Drop**: Open the viewer URL (e.g., `http://0.0.0.0:8090/`) in your browser and drag a `.drc` file into the window.
-    *   **Default Model**: If you placed a `model.drc` in your web server's root, it will be attempted by default if no other file is specified or requested via desktop integration.
+    *   **From File Manager**: Double-click any `.drc` file. The launcher script will attempt to start the server (`./start.sh` in `~/.local/share/drc-viewer/`) if it's not already running on port 8090. The model should then load directly.
+    *   **Drag and Drop**: If the server is running (either manually started or auto-started by the launcher), open `http://0.0.0.0:8090/` in your browser and drag a `.drc` file into the window.
+    *   **Default Model**: If `model.drc` exists (or is symlinked) in `~/.local/share/drc-viewer/`, it will be loaded by default when you open `http://0.0.0.0:8090/` without any specific model parameters.
+
+    *Note on server auto-start*: The launcher script does a basic check for a service on port 8090. If it starts the server, it does so in the background. You won't see server output unless you run `start.sh` manually in a terminal.
+
+**B. Remote Server (or local server not using `~/.local/share/drc-viewer/` as webroot):**
+
+1.  **Deploy `index.html`**: Place `index.html` (and any default `model.drc`) in your web server's document root.
+2.  **Configure Launcher (Optional for Desktop Clicks)**: If you want double-click to open your remote viewer URL, you'd need to edit `~/.local/share/drc-viewer/drc-viewer-launcher.sh` and change `SERVER_URL` to your remote server's address. The file copying part of the launcher script would be ineffective for a remote server.
+3.  **Open `.drc` files**:
+    *   **Drag and Drop**: This is the primary method. Open your viewer's URL and drag-and-drop files.
+    *   **From File Manager (with configured launcher)**: Double-clicking will open the viewer URL. **You will then need to drag and drop the file into the browser window** due to browser security restrictions preventing remote pages from accessing local files directly via `file:///` URIs.
+
+## Remote Server - Advanced Automatic Loading (Requires Backend)
+
+For a remote server to automatically load a model selected on the user's desktop without drag-and-drop, you would need a more complex setup:
+1.  The desktop launcher script (`drc-viewer-launcher.sh`) would need to POST the file content to a specific endpoint on your remote server.
+2.  Your remote server would require a backend application to receive this file, store it temporarily, and provide a way for `index.html` to load it (e.g., via a unique URL).
+This is significantly more complex than the current static viewer.
 
 ## Development / Manual Start (without desktop integration)
 
@@ -66,9 +79,11 @@ The `create.sh` script sets up desktop integration (e.g., for Nautilus on Ubuntu
 
 ## Uninstallation
 
-To remove the desktop integration and files installed by `create.sh`:
-1.  Remove the installation directory: `rm -rf ~/.local/share/drc-viewer`
+To remove the desktop integration and files installed by `install.sh`:
+1.  Remove the installation directory (this will remove symlinks and the launcher): `rm -rf ~/.local/share/drc-viewer`
 2.  Remove the .desktop file: `rm ~/.local/share/applications/drc-viewer.desktop`
-3.  Remove the MIME type definition: `rm ~/.local/share/mime/packages/application-x-drc.xml`
-4.  Update the MIME database: `update-mime-database ~/.local/share/mime`
-5.  You may need to manually change the default application for `.drc` files if another was previously set or if you want to associate them with a different program.
+3.  Remove the icon file (if installed): `rm ~/.local/share/icons/hicolor/scalable/apps/drc-viewer.png`
+4.  Remove the MIME type definition: `rm ~/.local/share/mime/packages/application-x-drc.xml`
+5.  Update the MIME database: `update-mime-database ~/.local/share/mime`
+6.  Update the icon cache (if `gtk-update-icon-cache` was used): `gtk-update-icon-cache -f -t ~/.local/share/icons/hicolor`
+7.  You may need to manually change the default application for `.drc` files if another was previously set or if you want to associate them with a different program.

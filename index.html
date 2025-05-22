@@ -171,53 +171,21 @@
 
             // Determine model to load from URL parameter or use default
             let modelToLoad = 'model.drc'; // Default model if no other instruction
-            let initialMessage = "Loading default model...";
-            let loadDefault = true;
+            let initialMessage = `Attempting to load default model: ${modelToLoad}`;
 
             const urlParams = new URLSearchParams(window.location.search);
-            const requestedFileURI = urlParams.get('requestedFileURI');
-            const modelFromURL = urlParams.get('model'); // Keep legacy 'model' param for direct links
+            const modelFromURL = urlParams.get('model');
 
-            if (requestedFileURI) {
-                const decodedURI = decodeURIComponent(requestedFileURI);
-                let filename = decodedURI;
-                try {
-                    // Attempt to get a nicer filename
-                    const url = new URL(decodedURI);
-                    if (url.protocol === 'file:') {
-                        filename = url.pathname.split('/').pop();
-                    }
-                } catch (e) { /* ignore, use full URI as filename */ }
-
-                loadingText.innerHTML = `Desktop request: <strong>${filename}</strong><br>Please drag & drop this file here.`;
-                progressBar.style.width = '0%';
-                loadingContainer.style.display = 'block';
-                controlsPanel.style.display = 'none'; // Hide controls until a model is actually loaded
-                console.log("Desktop requested to load model from URI:", decodedURI);
-                console.warn("Due to browser security, direct loading from this file URI is not possible. Please use drag & drop.");
-                loadDefault = false; // Don't attempt to load default if a file was requested via desktop
-            } else if (modelFromURL) {
+            if (modelFromURL) {
                 modelToLoad = decodeURIComponent(modelFromURL);
-                initialMessage = `Loading model from URL: ${modelToLoad}`;
+                initialMessage = `Loading model: ${modelToLoad}`;
                 console.log("Loading model from 'model' URL parameter:", modelToLoad);
-                loadDefault = true; // Proceed to load this specified model
             } else {
-                console.log("No specific model in URL, attempting to load default:", modelToLoad);
-                initialMessage = `Loading default model: ${modelToLoad}`;
-                loadDefault = true;
+                console.log("No 'model' URL parameter, will attempt to load default:", modelToLoad);
             }
 
-            if (loadDefault) {
-                // Load default/specified model if no desktop request URI was present
-                // or if 'model' param was used.
-                updateLoadingProgress(initialMessage, 0); // Set initial loading message
-                loadDracoModel(modelToLoad);
-            } else if (!requestedFileURI && !modelFromURL) {
-                // If no parameters at all, and not loading default (e.g. if loadDefault was set false elsewhere)
-                // This case might be redundant with current logic but good for clarity.
-                updateLoadingProgress('Drag & drop a .drc model to view.', 0);
-                // Do not call loadDracoModel, wait for user action.
-            }
+            updateLoadingProgress(initialMessage, 0);
+            loadDracoModel(modelToLoad); // Attempt to load whatever modelToLoad is set to
 
             window.addEventListener('resize', onWindowResize, false);
         }
@@ -324,24 +292,14 @@
             };
             
             const onError = function (error) {
-                // Check if this error is for the default model and a file was requested via desktop
-                const urlParams = new URLSearchParams(window.location.search);
-                const requestedFileURI = urlParams.get('requestedFileURI');
-                
-                if (source === 'model.drc' && requestedFileURI) {
-                    // This was an attempt to load the default 'model.drc', but a desktop file was requested.
-                    // The error for 'model.drc' is expected if not present, and user was already prompted for the desktop file.
-                    // So, don't overwrite the desktop request message.
-                    console.log("Default model 'model.drc' not found, which is okay as a desktop file was requested.");
-                    // Keep the existing message for the requestedFileURI
-                } else {
-                    showError('Error loading Draco model. ' + (error.message ? error.message : error) );
-                }
+                // Simplified error handling
+                showError('Error loading Draco model. ' + (error.message ? error.message : error) );
             };
 
             if (typeof source === 'string' && source.trim() !== '') { // Ensure source is not empty
                 updateLoadingProgress('Downloading model...', 0);
-                dracoLoader.load(source, onLoad, onProgress, 
+                const cacheBustedSource = source + '?v=' + new Date().getTime();
+                dracoLoader.load(cacheBustedSource, onLoad, onProgress, 
                     (err) => {
                         console.error('DracoLoader.load error:', err);
                         onError(err); // Pass the actual error object
