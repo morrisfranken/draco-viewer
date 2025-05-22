@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Enhanced Draco Viewer</title>
+    <style>
+        body { 
+            margin: 0; 
+            overflow: hidden; /* Hide scrollbars */
+            background-color: #282c34; /* Match scene background for loading */
+            font-family: sans-serif;
+            color: #eee;
+        }
+        canvas { display: block; }
+        #loading-container {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: rgba(0,0,0,0.8);
+            padding: 20px;
+            border-radius: 8px;
+            z-index: 100;
+            text-align: center;
+            min-width: 250px;
+        }
+        #loading-text {
+            font-size: 18px;
+            margin-bottom: 10px;
+        }
+        #progress-bar-container {
+            width: 100%;
+            background-color: #555;
+            border-radius: 4px;
+            height: 20px;
+            overflow: hidden; /* Ensures inner bar respects border-radius */
+        }
+        #progress-bar {
+            width: 0%;
+            height: 100%;
+            background-color: #4CAF50;
+            border-radius: 4px;
+            transition: width 0.1s ease-out;
+        }
+        #drop-zone-text {
+            position: absolute;
+            top: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: #aaa;
+            font-size: 16px;
+            display: none; /* Hidden by default, shown on drag over */
+        }
+        #controls-panel {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background-color: rgba(40, 40, 50, 0.85);
+            padding: 15px;
+            border-radius: 8px;
+            z-index: 50;
+            color: #f0f0f0;
+        }
+        #controls-panel h3 {
+            margin-top: 0;
+            margin-bottom: 10px;
+            font-size: 16px;
+            border-bottom: 1px solid #555;
+            padding-bottom: 5px;
+        }
+        #controls-panel label {
+            display: block;
+            margin-bottom: 8px;
+            font-size: 14px;
+        }
+        #controls-panel input[type="checkbox"] {
+            margin-right: 5px;
+            vertical-align: middle;
+        }
+
+    </style>
+</head>
+<body>
+    <div id="loading-container">
+        <div id="loading-text">Loading model...</div>
+        <div id="progress-bar-container">
+            <div id="progress-bar"></div>
+        </div>
+    </div>
+    <div id="drop-zone-text">Drop .drc file here</div>
+
+    <div id="controls-panel" style="display: none;"> <!-- Hidden until model loads -->
+        <h3>Viewer Controls</h3>
+        <label><input type="checkbox" id="toggle-ground" checked> Ground Plane</label>
+        <label><input type="checkbox" id="toggle-wireframe"> Wireframe</label>
+        <label><input type="checkbox" id="toggle-backfaceculling" checked> Backface Culling</label>
+    </div>
+
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
+    <script type="module">
+        import * as THREE from 'three';
+        import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+        let scene, camera, renderer, controls, directionalLight, modelMesh, groundPlane;
+        const loadingContainer = document.getElementById('loading-container');
+        const loadingText = document.getElementById('loading-text');
+        const progressBar = document.getElementById('progress-bar');
+        const dropZoneText = document.getElementById('drop-zone-text');
+        const controlsPanel = document.getElementById('controls-panel');
+
+        const dracoLoader = new DRACOLoader();
+        dracoLoader.setDecoderPath('https://www.gstatic.com/draco/versioned/decoders/1.5.6/');
+        dracoLoader.setDecoderConfig({ type: 'js' }); // Consider 'wasm' for better performance
+
+        function init() {
+            // Scene
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x282c34);
+
+            // Camera
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.set(0, 1, 3);
+
+            // Renderer
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.shadowMap.enabled = false; // Disable shadow mapping
+            document.body.appendChild(renderer.domElement);
+
+            // Controls
+            controls = new OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = false;
+            controls.screenSpacePanning = false;
+            controls.addEventListener('change', renderScene);
+
+            // Lights
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.3);
+            scene.add(ambientLight);
+
+            const hemisphereLight = new THREE.HemisphereLight(0xffffff, 0x888888, 0.9);
+            hemisphereLight.position.set(0, 20, 0);
+            scene.add(hemisphereLight);
+
+            directionalLight = new THREE.DirectionalLight(0xffffff, 1.2);
+            scene.add(directionalLight);
+            scene.add(directionalLight.target);
+
+            // Ground Plane
+            const groundMaterial = new THREE.MeshStandardMaterial({
+                color: 0x404040,
+                roughness: 0.8,
+                metalness: 0.2
+            });
+            groundPlane = new THREE.Mesh(
+                new THREE.PlaneGeometry(100, 100),
+                groundMaterial
+            );
+            groundPlane.rotation.x = -Math.PI / 2;
+            groundPlane.position.y = -1;
+            scene.add(groundPlane);
+
+            setupDragAndDrop();
+            setupUIControls();
+
+            // Determine model to load from URL parameter or use default
+            let modelToLoad = 'model.drc'; // Default model if no other instruction
+            let initialMessage = "Loading default model...";
+            let loadDefault = true;
+
+            const urlParams = new URLSearchParams(window.location.search);
+            const requestedFileURI = urlParams.get('requestedFileURI');
+            const modelFromURL = urlParams.get('model'); // Keep legacy 'model' param for direct links
+
+            if (requestedFileURI) {
+                const decodedURI = decodeURIComponent(requestedFileURI);
+                let filename = decodedURI;
+                try {
+                    // Attempt to get a nicer filename
+                    const url = new URL(decodedURI);
+                    if (url.protocol === 'file:') {
+                        filename = url.pathname.split('/').pop();
+                    }
+                } catch (e) { /* ignore, use full URI as filename */ }
+
+                loadingText.innerHTML = `Desktop request: <strong>${filename}</strong><br>Please drag & drop this file here.`;
+                progressBar.style.width = '0%';
+                loadingContainer.style.display = 'block';
+                controlsPanel.style.display = 'none'; // Hide controls until a model is actually loaded
+                console.log("Desktop requested to load model from URI:", decodedURI);
+                console.warn("Due to browser security, direct loading from this file URI is not possible. Please use drag & drop.");
+                loadDefault = false; // Don't attempt to load default if a file was requested via desktop
+            } else if (modelFromURL) {
+                modelToLoad = decodeURIComponent(modelFromURL);
+                initialMessage = `Loading model from URL: ${modelToLoad}`;
+                console.log("Loading model from 'model' URL parameter:", modelToLoad);
+                loadDefault = true; // Proceed to load this specified model
+            } else {
+                console.log("No specific model in URL, attempting to load default:", modelToLoad);
+                initialMessage = `Loading default model: ${modelToLoad}`;
+                loadDefault = true;
+            }
+
+            if (loadDefault) {
+                // Load default/specified model if no desktop request URI was present
+                // or if 'model' param was used.
+                updateLoadingProgress(initialMessage, 0); // Set initial loading message
+                loadDracoModel(modelToLoad);
+            } else if (!requestedFileURI && !modelFromURL) {
+                // If no parameters at all, and not loading default (e.g. if loadDefault was set false elsewhere)
+                // This case might be redundant with current logic but good for clarity.
+                updateLoadingProgress('Drag & drop a .drc model to view.', 0);
+                // Do not call loadDracoModel, wait for user action.
+            }
+
+            window.addEventListener('resize', onWindowResize, false);
+        }
+
+        function updateLoadingProgress(text, percentage) {
+            loadingContainer.style.display = 'block';
+            loadingText.innerText = text;
+            progressBar.style.width = percentage + '%';
+        }
+
+        function hideLoadingIndicator() {
+            loadingContainer.style.display = 'none';
+            controlsPanel.style.display = 'block';
+        }
+
+        function showError(message) {
+            loadingText.innerText = message;
+            progressBar.style.width = '0%';
+            console.error(message);
+            controlsPanel.style.display = 'none';
+        }
+        
+        function clearScene() {
+            if (modelMesh) {
+                scene.remove(modelMesh);
+                modelMesh.geometry.dispose();
+                modelMesh.material.dispose();
+                modelMesh = null;
+            }
+        }
+
+        function loadDracoModel(source) {
+            clearScene();
+            updateLoadingProgress('Preparing to load...', 0);
+
+            const onLoad = function (geometry) {
+                updateLoadingProgress('Decoding complete. Building scene...', 100);
+                
+                setTimeout(() => {
+                    geometry.computeVertexNormals();
+                    const material = new THREE.MeshStandardMaterial({
+                        color: 0xd1d1d1,
+                        metalness: 0.1,
+                        roughness: 0.5,
+                        side: document.getElementById('toggle-backfaceculling').checked ? THREE.FrontSide : THREE.DoubleSide,
+                        wireframe: document.getElementById('toggle-wireframe').checked
+                    });
+                    modelMesh = new THREE.Mesh(geometry, material);
+                    scene.add(modelMesh);
+
+                    geometry.computeBoundingBox();
+                    const center = new THREE.Vector3();
+                    geometry.boundingBox.getCenter(center);
+                    modelMesh.position.sub(center);
+
+                    const size = new THREE.Vector3();
+                    geometry.boundingBox.getSize(size);
+                    const maxDimInitial = Math.max(size.x, size.y, size.z) || 1;
+                    const scaleFactor = 2 / maxDimInitial;
+                    modelMesh.scale.set(scaleFactor, scaleFactor, scaleFactor);
+
+                    modelMesh.updateMatrixWorld(true);
+
+                    const box = new THREE.Box3().setFromObject(modelMesh);
+                    const modelSize = new THREE.Vector3();
+                    box.getSize(modelSize);
+                    const modelCenter = new THREE.Vector3();
+                    box.getCenter(modelCenter);
+
+                    groundPlane.position.y = box.min.y;
+                    groundPlane.visible = document.getElementById('toggle-ground').checked;
+
+                    controls.target.copy(modelCenter);
+
+                    const fov = camera.fov * (Math.PI / 180);
+                    const effectiveModelSize = Math.max(modelSize.x, modelSize.y, modelSize.z) || 1;
+                    const distance = (effectiveModelSize / 2) / Math.tan(fov / 2);
+
+                    camera.position.set(
+                        modelCenter.x,
+                        modelCenter.y + effectiveModelSize * 0.3,
+                        modelCenter.z + distance * 1.5
+                    );
+                    camera.lookAt(modelCenter);
+
+                    controls.minDistance = effectiveModelSize / 10;
+                    controls.maxDistance = effectiveModelSize * 10;
+                    controls.update();
+
+                    directionalLight.target = modelMesh;
+                    
+                    hideLoadingIndicator();
+                    renderScene();
+                }, 10);
+            };
+
+            const onProgress = function (xhr) {
+                if (xhr.lengthComputable) {
+                    const percentComplete = xhr.loaded / xhr.total * 100;
+                    updateLoadingProgress('Downloading model...', percentComplete);
+                } else {
+                    updateLoadingProgress('Downloading model...', 0);
+                }
+            };
+            
+            const onError = function (error) {
+                // Check if this error is for the default model and a file was requested via desktop
+                const urlParams = new URLSearchParams(window.location.search);
+                const requestedFileURI = urlParams.get('requestedFileURI');
+                
+                if (source === 'model.drc' && requestedFileURI) {
+                    // This was an attempt to load the default 'model.drc', but a desktop file was requested.
+                    // The error for 'model.drc' is expected if not present, and user was already prompted for the desktop file.
+                    // So, don't overwrite the desktop request message.
+                    console.log("Default model 'model.drc' not found, which is okay as a desktop file was requested.");
+                    // Keep the existing message for the requestedFileURI
+                } else {
+                    showError('Error loading Draco model. ' + (error.message ? error.message : error) );
+                }
+            };
+
+            if (typeof source === 'string' && source.trim() !== '') { // Ensure source is not empty
+                updateLoadingProgress('Downloading model...', 0);
+                dracoLoader.load(source, onLoad, onProgress, 
+                    (err) => {
+                        console.error('DracoLoader.load error:', err);
+                        onError(err); // Pass the actual error object
+                    }
+                );
+            } else if (source instanceof ArrayBuffer) {
+                updateLoadingProgress('Decoding model from file...', 50);
+                try {
+                    // Correctly use dracoLoader.parse with callbacks
+                    dracoLoader.parse(
+                        source,
+                        function (geometry) { // Success callback
+                            if (geometry) {
+                                onLoad(geometry);
+                            } else {
+                                // This case should ideally be caught by the error callback of parse
+                                onError(new Error("DRACOLoader.parse returned null geometry unexpectedly."));
+                            }
+                            dracoLoader.dispose(); // Dispose after processing
+                        },
+                        function (error) { // Error callback
+                            console.error('DracoLoader.parse error:', error);
+                            onError(error || new Error("DRACOLoader.parse failed."));
+                            dracoLoader.dispose(); // Dispose after error
+                        }
+                    );
+                } catch (e) {
+                    // This catch is a fallback, most errors should be caught by parse's error callback
+                    console.error('Unexpected error during dracoLoader.parse setup:', e);
+                    onError(e);
+                    if (dracoLoader) dracoLoader.dispose(); // Ensure dispose on unexpected error
+                }
+            }
+        }
+
+        function setupDragAndDrop() {
+            const body = document.body;
+            body.addEventListener('dragover', function(event) {
+                event.preventDefault();
+                event.dataTransfer.dropEffect = 'copy';
+                dropZoneText.style.display = 'block';
+                body.style.backgroundColor = '#3a3f4a';
+            });
+
+            body.addEventListener('dragleave', function(event) {
+                dropZoneText.style.display = 'none';
+                body.style.backgroundColor = '#282c34';
+            });
+
+            body.addEventListener('drop', function(event) {
+                event.preventDefault();
+                dropZoneText.style.display = 'none';
+                body.style.backgroundColor = '#282c34';
+
+                if (event.dataTransfer.files.length > 0) {
+                    const file = event.dataTransfer.files[0];
+                    if (file.name.toLowerCase().endsWith('.drc')) {
+                        const reader = new FileReader();
+                        reader.onload = function(e) {
+                            loadDracoModel(e.target.result);
+                        };
+                        reader.onerror = function(e) {
+                            showError('Error reading file.');
+                        }
+                        reader.readAsArrayBuffer(file);
+                    } else {
+                        showError('Please drop a .drc file.');
+                    }
+                }
+            });
+        }
+
+        function setupUIControls() {
+            const toggleGround = document.getElementById('toggle-ground');
+            const toggleWireframe = document.getElementById('toggle-wireframe');
+            const toggleBackfaceCulling = document.getElementById('toggle-backfaceculling');
+
+            toggleGround.addEventListener('change', function() {
+                groundPlane.visible = this.checked;
+                renderScene();
+            });
+
+            toggleWireframe.addEventListener('change', function() {
+                if (modelMesh) {
+                    modelMesh.material.wireframe = this.checked;
+                    renderScene();
+                }
+            });
+            
+            toggleBackfaceCulling.addEventListener('change', function() {
+                if (modelMesh) {
+                    modelMesh.material.side = this.checked ? THREE.FrontSide : THREE.DoubleSide;
+                    modelMesh.material.needsUpdate = true;
+                    renderScene();
+                }
+            });
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderScene();
+        }
+
+        function renderScene() {
+            if (directionalLight && camera) {
+                directionalLight.position.copy(camera.position);
+                if (directionalLight.target && directionalLight.target !== scene) {
+                     directionalLight.target.updateMatrixWorld();
+                }
+            }
+            renderer.render(scene, camera);
+        }
+
+        init();
+    </script>
+</body>
+</html>
