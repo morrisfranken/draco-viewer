@@ -64,6 +64,14 @@ else
     echo "Warning: Icon file $SOURCE_ICON_FILE not found in $SCRIPT_SOURCE_DIR. Generic icon will be used."
 fi
 
+# Symlink the icon file to INSTALL_DIR to be used as favicon by index.html (if served locally)
+if [ -f "$SCRIPT_SOURCE_DIR/$SOURCE_ICON_FILE" ]; then
+    ln -sf "$SCRIPT_SOURCE_DIR/$SOURCE_ICON_FILE" "$INSTALL_DIR/$SOURCE_ICON_FILE"
+    echo "Symlinked $SOURCE_ICON_FILE to $INSTALL_DIR/ for use as favicon."
+else
+    echo "Warning: Icon file $SOURCE_ICON_FILE not found in $SCRIPT_SOURCE_DIR. Favicon might not be available for local server."
+fi
+
 echo "Ensure source directory '$SCRIPT_SOURCE_DIR' remains accessible for symlinks to work."
 echo "Any default model.drc should also be placed (or symlinked) by the user into $INSTALL_DIR."
 

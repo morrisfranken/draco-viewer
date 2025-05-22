@@ -19,7 +19,7 @@ The `install.sh` script sets up desktop integration for `.drc` files.
 
 **Prerequisites for Local Direct Open:**
 *   The script assumes `index.html`, `start.sh`, and (optionally) `drc-viewer.png` are in the same directory as `install.sh` when you run it.
-*   These files (`index.html`, `start.sh`) will be symlinked into `~/.local/share/drc-viewer/`. **The original source directory must remain accessible for these symlinks to work.**
+*   These files (`index.html`, `start.sh`, and `drc-viewer.png` for the favicon) will be symlinked into `~/.local/share/drc-viewer/`. **The original source directory must remain accessible for these symlinks to work.**
 *   If you want a default model when opening the base URL, place or symlink `model.drc` into `~/.local/share/drc-viewer/`.
 
 **Installation Steps**:
@@ -33,8 +33,8 @@ The `install.sh` script sets up desktop integration for `.drc` files.
     ```
     This script will:
     *   Create `~/.local/share/drc-viewer/`.
-    *   Symlink `start.sh` and `index.html` from your source directory to `~/.local/share/drc-viewer/`.
-    *   Copy `drc-viewer.png` (if present) as the icon.
+    *   Symlink `start.sh`, `index.html`, and `drc-viewer.png` (for favicon) from your source directory to `~/.local/share/drc-viewer/`.
+    *   Copy `drc-viewer.png` (if present) as the desktop icon.
     *   Create a launcher script `~/.local/share/drc-viewer/drc-viewer-launcher.sh` which attempts to start the local server if not running, and symlinks the selected `.drc` file for viewing.
     *   Set up a `.desktop` file and custom MIME type.
 
