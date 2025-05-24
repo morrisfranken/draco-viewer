@@ -6,115 +6,317 @@
     <style>
         body { 
             margin: 0; 
-            overflow: hidden; /* Hide scrollbars */
-            background-color: #282c34; /* Match scene background for loading */
-            font-family: sans-serif;
+            overflow: hidden;
+            background-color: #1e2228; /* Darker background for more professional look */
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; /* Modern font */
             color: #eee;
         }
         canvas { display: block; }
+        
+        /* Improved loading container */
         #loading-container {
             position: absolute;
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
-            background-color: rgba(0,0,0,0.8);
-            padding: 20px;
-            border-radius: 8px;
+            background-color: rgba(20, 22, 26, 0.9);
+            padding: 25px;
+            border-radius: 10px;
             z-index: 100;
             text-align: center;
-            min-width: 250px;
+            min-width: 300px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.5);
+            border: 1px solid #363c46;
         }
+        
         #loading-text {
             font-size: 18px;
-            margin-bottom: 10px;
+            margin-bottom: 15px;
+            font-weight: 500;
         }
+        
         #progress-bar-container {
             width: 100%;
-            background-color: #555;
-            border-radius: 4px;
-            height: 20px;
-            overflow: hidden; /* Ensures inner bar respects border-radius */
+            background-color: #2c3038;
+            border-radius: 6px;
+            height: 10px;
+            overflow: hidden;
         }
+        
         #progress-bar {
             width: 0%;
             height: 100%;
-            background-color: #4CAF50;
-            border-radius: 4px;
+            background: linear-gradient(90deg, #4776e6, #8e54e9); /* Gradient progress bar */
+            border-radius: 6px;
             transition: width 0.1s ease-out;
         }
+        
         #drop-zone-text {
             position: absolute;
-            top: 10px;
+            top: 20px;
             left: 50%;
             transform: translateX(-50%);
-            color: #aaa;
+            color: #ccc;
             font-size: 16px;
             display: none; /* Hidden by default, shown on drag over */
+            background-color: rgba(20, 22, 26, 0.7);
+            padding: 10px 20px;
+            border-radius: 30px;
+            border: 1px dashed #666;
         }
+        
+        /* Improved controls panel */
         #controls-panel {
             position: absolute;
-            top: 10px;
-            right: 10px;
-            background-color: rgba(40, 40, 50, 0.85);
-            padding: 15px;
-            border-radius: 8px;
+            top: 15px;
+            right: 15px;
+            background-color: rgba(20, 22, 26, 0.85);
+            padding: 15px 20px;
+            border-radius: 10px;
             z-index: 50;
             color: #f0f0f0;
+            box-shadow: 0 3px 10px rgba(0,0,0,0.3);
+            border: 1px solid #363c46;
+            backdrop-filter: blur(5px);
+            max-height: calc(100vh - 30px);
+            overflow-y: auto;
+            width: 240px;
         }
+        
         #controls-panel h3 {
             margin-top: 0;
-            margin-bottom: 10px;
+            margin-bottom: 15px; /* Adjusted if header is flex */
             font-size: 16px;
             border-bottom: 1px solid #555;
-            padding-bottom: 5px;
+            padding-bottom: 8px;
+            font-weight: 500;
+            flex-grow: 1; /* Allow h3 to take space */
         }
-        #controls-panel label {
-            display: block;
-            margin-bottom: 8px;
-            font-size: 14px;
+
+        #controls-panel-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            /* margin-bottom: 10px; /* Replaced by h3 margin or padding on content */
         }
-        #controls-panel input[type="checkbox"] {
-            margin-right: 5px;
-            vertical-align: middle;
+
+        #toggle-controls-panel-collapse {
+            background: none;
+            border: 1px solid #555;
+            color: #eee;
+            /* padding: 4px 10px; */ /* Adjusted for icon */
+            padding: 5px;
+            width: 28px; /* Fixed size for icon button */
+            height: 28px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 4px;
+            cursor: pointer;
+            /* font-size: 12px; */ /* No text */
+            margin-left: 10px;
+            flex-shrink: 0;
+            transition: transform 0.2s ease-in-out; /* For arrow rotation */
         }
+
+        #toggle-controls-panel-collapse svg {
+            width: 16px;
+            height: 16px;
+            stroke: currentColor;
+            transition: transform 0.2s ease-in-out;
+        }
+
+        #toggle-controls-panel-collapse.collapsed svg {
+            transform: rotate(-180deg); /* Rotate arrow when collapsed */
+        }
+
+        #controls-panel-content.collapsed {
+            display: none;
+        }
+
+        .control-section {
+            margin-bottom: 18px;
+            padding-bottom: 18px;
+            border-bottom: 1px solid #333;
+        }
+
+        .control-section:last-child {
+            margin-bottom: 0;
+            padding-bottom: 0;
+            border-bottom: none;
+        }
+        
+        #controls-panel select {
+            background-color: #2c3038;
+            color: #fff;
+            border: 1px solid #454955;
+            border-radius: 4px;
+            padding: 5px 8px;
+            width: 100%;
+            font-size: 13px;
+            margin-top: 5px;
+            appearance: none;
+            background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+            background-repeat: no-repeat;
+            background-position: right 8px center;
+            background-size: 12px;
+        }
+        
+        #controls-panel input[type="range"] {
+            width: 100%;
+            margin-top: 5px;
+            background: #2c3038;
+            height: 5px;
+            border-radius: 5px;
+            appearance: none;
+            accent-color: #8e54e9;
+        }
+        
+        #controls-panel input[type="range"]::-webkit-slider-thumb {
+            appearance: none;
+            width: 15px;
+            height: 15px;
+            border-radius: 50%;
+            background: #8e54e9;
+            cursor: pointer;
+        }
+        
+        #controls-panel input[type="color"] {
+            width: 30px;
+            height: 30px;
+            border: none;
+            border-radius: 4px;
+            background: none;
+            padding: 0;
+            margin-right: 10px;
+            cursor: pointer;
+        }
+        
+        .range-value {
+            font-size: 12px;
+            margin-left: 5px;
+            color: #8e8e8e;
+            min-width: 30px;
+            text-align: right;
+        }
+        
+        /* Improved model info container */
         #model-info-container {
             position: absolute;
-            top: 10px;
-            left: 10px;
-            background-color: rgba(40, 40, 50, 0.75);
-            padding: 8px 12px;
-            border-radius: 6px;
+            top: 15px;
+            left: 15px;
+            background-color: rgba(20, 22, 26, 0.85);
+            padding: 10px 15px;
+            border-radius: 10px;
             z-index: 60;
             color: #e0e0e0;
             font-size: 14px;
-            display: none; /* Hidden until a model is loaded */
-            max-width: calc(100vw - 250px); /* Avoid overlapping with controls panel */
+            display: none;
+            max-width: calc(100vw - 300px);
             overflow: hidden;
             text-overflow: ellipsis;
             white-space: nowrap;
+            box-shadow: 0 3px 10px rgba(0,0,0,0.3);
+            border: 1px solid #363c46;
+            backdrop-filter: blur(5px);
         }
-
+        
+        /* GitHub attribution */
+        #github-link {
+            position: absolute;
+            bottom: 15px;
+            left: 15px;
+            color: #aaa;
+            font-size: 12px;
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            background-color: rgba(20, 22, 26, 0.7);
+            padding: 8px 12px;
+            border-radius: 20px;
+            transition: all 0.2s ease;
+            z-index: 50;
+        }
+        
+        #github-link:hover {
+            color: #fff;
+            background-color: rgba(20, 22, 26, 0.9);
+        }
+        
+        #github-link svg {
+            margin-right: 6px;
+            vertical-align: middle;
+        }
+        
+        /* Responsive adjustments */
+        @media (max-width: 768px) {
+            #controls-panel {
+                padding: 12px 15px;
+            }
+            
+            #model-info-container {
+                max-width: calc(100vw - 200px);
+            }
+        }
     </style>
 </head>
 <body>
+    <!-- Loading container -->
     <div id="loading-container">
-        <div id="loading-text">Loading model...</div>
+        <div id="loading-text"></div>
         <div id="progress-bar-container">
             <div id="progress-bar"></div>
         </div>
     </div>
+    
+    <!-- Drop zone text -->
     <div id="drop-zone-text">Drop .drc file here</div>
 
+    <!-- Model info container -->
     <div id="model-info-container">
         Current Model: <span id="current-model-name"></span>
     </div>
 
+    <!-- Controls panel -->
     <div id="controls-panel" style="display: none;"> <!-- Hidden until model loads -->
-        <h3>Viewer Controls</h3>
-        <label><input type="checkbox" id="toggle-ground" checked> Ground Plane</label>
-        <label><input type="checkbox" id="toggle-wireframe"> Wireframe</label>
-        <label><input type="checkbox" id="toggle-backfaceculling" checked> Backface Culling</label>
+        <div id="controls-panel-header">
+            <h3>Viewer Controls</h3>
+            <button id="toggle-controls-panel-collapse" title="Toggle controls panel">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="6 9 12 15 18 9"></polyline>
+                </svg>
+            </button>
+        </div>
+        <div id="controls-panel-content">
+            <div class="control-section">
+                <h4>Display</h4>
+                <label><input type="checkbox" id="toggle-backfaceculling" checked> Backface Culling</label>
+            </div>
+            
+            <div class="control-section">
+                <h4>Background</h4>
+                <label>
+                    <select id="background-type">
+                        <option value="color">Solid Color</option>
+                        <option value="hdr">HDR</option>
+                    </select>
+                </label>
+                <div id="background-color-controls"> <!-- Visibility will be controlled by JS -->
+                    <label>
+                        <input type="color" id="background-color" value="#1e2228">
+                    </label>
+                </div>
+            </div>
+        </div>
     </div>
+    
+    <!-- GitHub attribution -->
+    <a href="https://github.com/morrisfranken/drc-viewer" target="_blank" id="github-link">
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"></path>
+        </svg>
+        DRC Viewer on GitHub
+    </a>
 
     <script type="importmap">
         {
@@ -128,8 +330,10 @@
         import * as THREE from 'three';
         import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
         import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+        import { RGBELoader } from 'three/addons/loaders/RGBELoader.js'; // Added for HDR
 
-        let scene, camera, renderer, controls, directionalLight, modelMesh, groundPlane;
+        let scene, camera, renderer, controls, directionalLight, modelMesh, ambientLight, hemisphereLight;
+        // let gradientTexture; // Removed gradientTexture
         const loadingContainer = document.getElementById('loading-container');
         const loadingText = document.getElementById('loading-text');
         const progressBar = document.getElementById('progress-bar');
@@ -140,12 +344,17 @@
 
         const dracoLoader = new DRACOLoader();
         dracoLoader.setDecoderPath('https://www.gstatic.com/draco/versioned/decoders/1.5.6/');
-        dracoLoader.setDecoderConfig({ type: 'js' }); // Consider 'wasm' for better performance
+        dracoLoader.setDecoderConfig({ type: 'wasm' });
 
+        let isElectronLoadingFile = false; // Flag for Electron file loading state
+        
         function init() {
+            // Create gradient texture - REMOVED
+            // gradientTexture = createGradientTexture();
+            
             // Scene
             scene = new THREE.Scene();
-            scene.background = new THREE.Color(0x282c34);
+            // scene.background is set in setupUIControls or updateBackgroundType based on localStorage
 
             // Camera
             camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
@@ -154,20 +363,23 @@
             // Renderer
             renderer = new THREE.WebGLRenderer({ antialias: true });
             renderer.setSize(window.innerWidth, window.innerHeight);
-            renderer.shadowMap.enabled = false; // Disable shadow mapping
+            renderer.shadowMap.enabled = false;
+            renderer.toneMapping = THREE.ACESFilmicToneMapping; // Added for HDR
+            renderer.toneMappingExposure = 1; // Added for HDR
             document.body.appendChild(renderer.domElement);
 
-            // Controls
+            // Controls - Fix for sluggish movement
             controls = new OrbitControls(camera, renderer.domElement);
-            controls.enableDamping = false;
+            controls.enableDamping = false; // Disable damping for immediate response
             controls.screenSpacePanning = false;
+            controls.zoomToCursor = false; // Prevent rotation when zooming
             controls.addEventListener('change', renderScene);
 
             // Lights
-            const ambientLight = new THREE.AmbientLight(0xffffff, 0.3);
+            ambientLight = new THREE.AmbientLight(0xffffff, 0.3);
             scene.add(ambientLight);
 
-            const hemisphereLight = new THREE.HemisphereLight(0xffffff, 0x888888, 0.9);
+            hemisphereLight = new THREE.HemisphereLight(0xffffff, 0x888888, 0.9);
             hemisphereLight.position.set(0, 20, 0);
             scene.add(hemisphereLight);
 
@@ -175,68 +387,55 @@
             scene.add(directionalLight);
             scene.add(directionalLight.target);
 
-            // Ground Plane
-            const groundMaterial = new THREE.MeshStandardMaterial({
-                color: 0x404040,
-                roughness: 0.8,
-                metalness: 0.2
-            });
-            groundPlane = new THREE.Mesh(
-                new THREE.PlaneGeometry(100, 100),
-                groundMaterial
-            );
-            groundPlane.rotation.x = -Math.PI / 2;
-            groundPlane.position.y = -1;
-            scene.add(groundPlane);
-
             setupDragAndDrop();
-            setupUIControls();
+            setupUIControls(); // This will now also load settings
+            updateBackgroundType(); // Apply initial background based on loaded settings
 
             // Electron: Listen for file path from main process
             if (window.electronAPI && typeof window.electronAPI.onLoadFile === 'function') {
                 window.electronAPI.onLoadFile(async (filePath) => {
+                    isElectronLoadingFile = true;
                     console.log('Renderer process: Received file path via IPC:', filePath);
-                    document.title = `Draco Viewer - ${filePath.split(/[/\\]/).pop()}`;
-                    updateLoadingProgress(`Reading file: ${filePath}...`, 0);
+                    document.title = `Draco Viewer - ${filePath.split(/[\/\\]/).pop()}`;
+                    updateLoadingProgress(`Reading file: ${filePath}...`, 0); // Initial message for IPC load
                     try {
                         console.log('Renderer process: Requesting file content for:', filePath);
                         const result = await window.electronAPI.readFileContent(filePath);
                         console.log('Renderer process: Received result from readFileContent for:', filePath, 'Success:', result.success);
 
                         if (result.success && result.data) {
-                            // result.data is a Buffer (or Uint8Array behaving like one) from the main process.
-                            // DRACOLoader.parse expects an ArrayBuffer.
-                            // Convert Node Buffer/Uint8Array to ArrayBuffer.
-                            const receivedBuffer = result.data; // This is a Uint8Array/Buffer
+                            const receivedBuffer = result.data;
                             const arrayBuffer = receivedBuffer.buffer.slice(
                                 receivedBuffer.byteOffset,
                                 receivedBuffer.byteOffset + receivedBuffer.byteLength
                             );
                             console.log('Renderer process: File content read and converted to ArrayBuffer, length:', arrayBuffer.byteLength);
-                            loadDracoModel(arrayBuffer, filePath); // Pass ArrayBuffer and full path
+                            loadDracoModel(arrayBuffer, filePath); // This will set its own progress messages
                         } else {
                             showError(`Error reading file content: ${result.error || 'Unknown error'}`);
+                            isElectronLoadingFile = false; // Reset flag on error
                         }
                     } catch (error) {
                         console.error('Renderer process: Error in onLoadFile processing:', error);
                         showError(`Error processing file: ${error.message}`);
+                        isElectronLoadingFile = false; // Reset flag on error
                     }
                 });
-                // Initial message for Electron if no file is passed on startup
-                // This check needs to be robust enough if onLoadFile is async and modelMesh might not be set yet.
-                // A slight delay or a flag could be used, but for now, this assumes onLoadFile would execute quickly if a file was passed.
-                setTimeout(() => { // Add a small delay to allow initial IPC to potentially load a model
-                    if (!modelMesh) {
+                
+                setTimeout(() => {
+                    // Show initial message if no model, Electron isn't loading, and HDR isn't loading
+                    if (!modelMesh && !isElectronLoadingFile && 
+                        (!loadingText.innerText || !loadingText.innerText.includes('Loading HDR'))) {
                         updateLoadingProgress('Open a .drc file or drag & drop one here.', 0);
                     }
-                }, 100);
+                }, 300); // Delay to allow other initial processes to set messages
 
             } else {
-                // Fallback for non-Electron environment (e.g. browser serving the page)
+                // Fallback for non-Electron environment
                 console.warn("Electron API not found. Running in browser mode. Please drag & drop a .drc file.");
-                updateLoadingProgress('Drag & drop a .drc model to view.', 0);
-                // Do not attempt to load a default model from a relative path.
-                // The loading indicator will stay until a file is dropped.
+                if (!modelMesh && localStorage.getItem('drcViewer-backgroundType') !== 'hdr') {
+                    updateLoadingProgress('Drag & drop a .drc model to view.', 0);
+                }
             }
 
             window.addEventListener('resize', onWindowResize, false);
@@ -249,9 +448,44 @@
         }
 
         function hideLoadingIndicator() {
-            loadingContainer.style.display = 'none';
-            controlsPanel.style.display = 'block';
-            // modelInfoContainer display is handled by loadDracoModel's onLoad
+            if (modelMesh) {
+                // Model is loaded and ready
+                loadingContainer.style.display = 'none';
+                controlsPanel.style.display = 'block';
+                // Apply collapsed state when panel is shown
+                const collapseButton = document.getElementById('toggle-controls-panel-collapse');
+                const controlsContent = document.getElementById('controls-panel-content');
+                if (collapseButton && controlsContent) {
+                    const isCollapsed = localStorage.getItem('drcViewer-controlsCollapsed') === 'true';
+                    if (isCollapsed) {
+                        controlsContent.classList.add('collapsed');
+                        collapseButton.classList.add('collapsed');
+                    } else {
+                        controlsContent.classList.remove('collapsed');
+                        collapseButton.classList.remove('collapsed');
+                    }
+                }
+            } else {
+                // No model is loaded (or not yet ready)
+                controlsPanel.style.display = 'none'; // Always hide controls if no model
+
+                if (isElectronLoadingFile) {
+                    // Electron is attempting to load a file. Its progress messages should be displayed.
+                    // Do not hide loadingContainer or show a generic prompt.
+                    // Ensure loadingContainer is visible if it was showing Electron's progress.
+                    if (loadingContainer.style.display === 'none' && 
+                        (loadingText.innerText.includes('Reading file') || loadingText.innerText.includes('Decoding model'))) {
+                         loadingContainer.style.display = 'block'; // Re-show if accidentally hidden
+                    }
+                } else {
+                    // No Electron file loading, and no model.
+                    // Show the generic "Drag & drop" prompt, unless HDR is actively loading.
+                    if (!loadingText.innerText || !loadingText.innerText.includes('Loading HDR')) {
+                        updateLoadingProgress('Drag & drop a .drc model to view.', 0);
+                        loadingContainer.style.display = 'block'; // Ensure prompt is visible
+                    }
+                }
+            }
         }
 
         function showError(message) {
@@ -277,42 +511,36 @@
             document.title = "Draco Viewer";
         }
 
-        function loadDracoModel(source, displayInfo) { // displayInfo is now full path or filename
+        function loadDracoModel(source, displayInfo) {
             clearScene();
-            progressBar.style.backgroundColor = '#4CAF50'; // Reset progress bar color on new load
+            progressBar.style.backgroundColor = '#4CAF50';
             
-            const loadingMessage = displayInfo ? `Preparing to load ${displayInfo.split(/[/\\]/).pop()}...` : 'Preparing to load...';
-            updateLoadingProgress(loadingMessage, 0);
+            // const loadingMessage = displayInfo ? `Preparing to load ${displayInfo.split(/[\/\\]/).pop()}...` : 'Preparing to load...';
+            // updateLoadingProgress(loadingMessage, 0); // This might be too early if called from Electron IPC which already set a message
 
-            // Set page title based on displayInfo if it's likely a filename, or a generic part of it
             if(displayInfo) {
                 let titleName = displayInfo;
-                if (displayInfo.includes('/')) { // If it's a path
-                    titleName = displayInfo.split('/').pop(); // Get basename for title
+                if (displayInfo.includes('/') || displayInfo.includes('\\')) { 
+                    titleName = displayInfo.split(/[\/\\]/).pop();
                 }
                 document.title = `Draco Viewer - ${titleName}`;
             }
 
-            const onLoad = function (geometry) {
+            const handleModelLoadSuccess = function (geometry) {
                 updateLoadingProgress('Decoding complete. Building scene...', 100);
                 
                 setTimeout(() => {
-                    if (!geometry) { // Should be caught by parse's error callback, but as a safeguard
-                        showError("Failed to decode model: Geometry is null.");
-                        if (dracoLoader) dracoLoader.dispose();
+                    if (!geometry) {
+                        handleModelLoadError("Failed to decode model: Geometry is null.");
                         return;
                     }
                     geometry.computeVertexNormals();
-                    const material = new THREE.MeshStandardMaterial({
-                        color: 0xd1d1d1,
-                        metalness: 0.1,
-                        roughness: 0.5,
-                        side: document.getElementById('toggle-backfaceculling').checked ? THREE.FrontSide : THREE.DoubleSide,
-                        wireframe: document.getElementById('toggle-wireframe').checked
-                    });
+                    
+                    const material = createModelMaterial();
                     modelMesh = new THREE.Mesh(geometry, material);
                     scene.add(modelMesh);
 
+                    // ... (rest of existing model setup: bounding box, scaling, camera, etc.)
                     geometry.computeBoundingBox();
                     const center = new THREE.Vector3();
                     geometry.boundingBox.getCenter(center);
@@ -332,9 +560,6 @@
                     const modelCenter = new THREE.Vector3();
                     box.getCenter(modelCenter);
 
-                    groundPlane.position.y = box.min.y;
-                    groundPlane.visible = document.getElementById('toggle-ground').checked;
-
                     controls.target.copy(modelCenter);
 
                     const fov = camera.fov * (Math.PI / 180);
@@ -353,14 +578,16 @@
                     controls.update();
 
                     directionalLight.target = modelMesh;
+                    // END of model setup
                     
-                    hideLoadingIndicator();
+                    isElectronLoadingFile = false; // Reset flag
+                    hideLoadingIndicator(); // Call this when model is actually ready and processed
+
                     if (displayInfo) {
                         currentModelNameSpan.textContent = displayInfo;
-                        currentModelNameSpan.title = displayInfo; // Set tooltip to the full info
+                        currentModelNameSpan.title = displayInfo;
                         modelInfoContainer.style.display = 'block';
                     } else if (typeof source === 'string' && source !== '_active_model.drc') {
-                        // Fallback for direct URL or default model if displayInfo wasn't explicitly passed
                         currentModelNameSpan.textContent = source;
                         currentModelNameSpan.title = source;
                         modelInfoContainer.style.display = 'block';
@@ -371,17 +598,16 @@
                 }, 10);
             };
 
-            const onProgress = function (xhr) {
+            const onModelDownloadProgress = function (xhr) {
                 if (xhr.lengthComputable) {
                     const percentComplete = xhr.loaded / xhr.total * 100;
                     updateLoadingProgress(`Downloading model... (${Math.round(percentComplete)}%)`, percentComplete);
                 } else {
-                    updateLoadingProgress('Downloading model... (progress unknown)', 0); // Or some indeterminate state
+                    updateLoadingProgress('Downloading model... (progress unknown)', 0);
                 }
             };
             
-            const onError = function (error) {
-                // Simplified error handling
+            const handleModelLoadError = function (error) {
                 let errorMessage = 'Error loading Draco model.';
                 if (error instanceof Error) {
                     errorMessage += ` ${error.message}`;
@@ -393,51 +619,39 @@
                     errorMessage += ` An unknown error occurred.`;
                 }
                 console.error('DracoLoader error details:', error);
-                showError(errorMessage);
+                isElectronLoadingFile = false; // Reset flag on error
+                showError(errorMessage); // showError handles UI for loading indicator
                 if (dracoLoader) dracoLoader.dispose();
             };
 
-            if (typeof source === 'string' && source.trim() !== '') { // Ensure source is not empty
-                updateLoadingProgress(`Downloading ${displayInfo ? displayInfo.split(/[/\\]/).pop() : source}...`, 0);
+            if (typeof source === 'string' && source.trim() !== '') {
+                updateLoadingProgress(`Downloading ${displayInfo ? displayInfo.split(/[\/\\]/).pop() : source}...`, 0);
                 const cacheBustedSource = source + '?v=' + new Date().getTime();
-                dracoLoader.load(cacheBustedSource, onLoad, onProgress, 
-                    (err) => {
-                        console.error('DracoLoader.load error:', err);
-                        onError(err); // Pass the actual error object
-                    }
-                );
+                dracoLoader.load(cacheBustedSource, handleModelLoadSuccess, onModelDownloadProgress, handleModelLoadError);
             } else if (source instanceof ArrayBuffer) {
-                updateLoadingProgress('Decoding model from file...', 50);
+                updateLoadingProgress('Decoding model from file...', 50); // Message for parsing from buffer
                 try {
-                    // Correctly use dracoLoader.parse with callbacks
                     dracoLoader.parse(
                         source,
-                        function (geometry) { // Success callback
+                        function (geometry) { 
                             if (geometry) {
-                                onLoad(geometry);
+                                handleModelLoadSuccess(geometry);
                             } else {
-                                onError(new Error("DRACOLoader.parse returned null or invalid geometry."));
+                                handleModelLoadError(new Error("DRACOLoader.parse returned null or invalid geometry."));
                             }
                         },
-                        function (error) { // Error callback
-                            console.error('DracoLoader.parse error:', error);
-                            onError(error || new Error("DRACOLoader.parse failed."));
+                        function (parseError) { 
+                            console.error('DracoLoader.parse error:', parseError);
+                            handleModelLoadError(parseError || new Error("DRACOLoader.parse failed."));
                         }
                     );
                 } catch (e) {
-                    // This catch is a fallback, most errors should be caught by parse's error callback
                     console.error('Unexpected error during dracoLoader.parse setup:', e);
-                    onError(e);
-                } finally {
-                    // Ensure dispose is called if dracoLoader was used for parsing
-                    // For .load(), dispose is handled internally or if an error occurs.
-                    // For .parse(), we need to manage it.
-                    if (dracoLoader && source instanceof ArrayBuffer) {
-                         dracoLoader.dispose();
-                    }
-                }
+                    handleModelLoadError(e);
+                } 
+                // dracoLoader.dispose() for parse is typically not needed unless re-instantiating loader per parse
             } else if (!source) {
-                showError("No model source provided to loadDracoModel.");
+                handleModelLoadError("No model source provided to loadDracoModel.");
             }
         }
 
@@ -482,30 +696,179 @@
             });
         }
 
-        function setupUIControls() {
-            const toggleGround = document.getElementById('toggle-ground');
-            const toggleWireframe = document.getElementById('toggle-wireframe');
-            const toggleBackfaceCulling = document.getElementById('toggle-backfaceculling');
-
-            toggleGround.addEventListener('change', function() {
-                groundPlane.visible = this.checked;
-                renderScene();
-            });
-
-            toggleWireframe.addEventListener('change', function() {
-                if (modelMesh) {
-                    modelMesh.material.wireframe = this.checked;
-                    renderScene();
-                }
+        function createModelMaterial() {
+            const material = new THREE.MeshStandardMaterial({
+                color: 0xd1d1d1, // Keep a default color
+                metalness: 0.1,
+                roughness: 0.5,
+                side: document.getElementById('toggle-backfaceculling').checked ? THREE.FrontSide : THREE.DoubleSide
             });
             
-            toggleBackfaceCulling.addEventListener('change', function() {
-                if (modelMesh) {
-                    modelMesh.material.side = this.checked ? THREE.FrontSide : THREE.DoubleSide;
-                    modelMesh.material.needsUpdate = true;
-                    renderScene();
+            return material;
+        }
+        
+        function updateBackfaceCulling() {
+            if (modelMesh) {
+                const isChecked = document.getElementById('toggle-backfaceculling').checked;
+                modelMesh.material.side = isChecked ? THREE.FrontSide : THREE.DoubleSide;
+                modelMesh.material.needsUpdate = true;
+                localStorage.setItem('drcViewer-backfaceCulling', isChecked);
+                renderScene();
+            }
+        }
+        
+        function updateBackgroundType() {
+            const bgType = document.getElementById('background-type').value;
+            const bgColorInput = document.getElementById('background-color');
+            const bgColorControls = document.getElementById('background-color-controls');
+            
+            localStorage.setItem('drcViewer-backgroundType', bgType);
+            
+            scene.environment = null;
+            renderer.toneMapping = THREE.NoToneMapping;
+
+            switch(bgType) {
+                case 'color':
+                    const savedColor = localStorage.getItem('drcViewer-backgroundColor') || '#1e2228';
+                    bgColorInput.value = savedColor; // Ensure color picker shows the loaded/default color
+                    scene.background = new THREE.Color(savedColor);
+                    bgColorControls.style.display = 'block';
+                    break;
+                case 'hdr':
+                    bgColorControls.style.display = 'none';
+                    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+                    renderer.toneMappingExposure = 1;
+                    // Only show HDR loading message if Electron isn't primary or its message isn't active
+                    if (!isElectronLoadingFile || 
+                        (isElectronLoadingFile && !modelMesh && 
+                         !loadingText.innerText.includes('Reading file') && 
+                         !loadingText.innerText.includes('Decoding model'))) {
+                        updateLoadingProgress('Loading HDR background...', 0);
+                    }
+                    new RGBELoader()
+                        .setPath('https://threejs.org/examples/textures/equirectangular/')
+                        .load('royal_esplanade_1k.hdr', function (texture) {
+                            texture.mapping = THREE.EquirectangularReflectionMapping;
+                            scene.background = texture;
+                            scene.environment = texture;
+                            // Show HDR loaded message briefly, respecting Electron loading state
+                            if (!isElectronLoadingFile || (isElectronLoadingFile && !modelMesh && !loadingText.innerText.includes('Decoding model'))) {
+                                updateLoadingProgress('HDR background loaded.', 100);
+                            }
+                            setTimeout(() => {
+                                hideLoadingIndicator(); // Will respect isElectronLoadingFile
+                                renderScene();
+                            }, 500);
+                        }, 
+                        (xhr) => { // onProgress for HDR
+                            if (!isElectronLoadingFile || (isElectronLoadingFile && !modelMesh && !loadingText.innerText.includes('Decoding model'))) {
+                                if (xhr.lengthComputable) {
+                                    const percentComplete = xhr.loaded / xhr.total * 100;
+                                    updateLoadingProgress(`Loading HDR... (${Math.round(percentComplete)}%)`, percentComplete);
+                                } else {
+                                    updateLoadingProgress('Loading HDR...', 0);
+                                }
+                            }
+                        },
+                        (error) => { // onError for HDR
+                            console.error('Error loading HDR:', error);
+                            showError('Failed to load HDR background. Reverting to solid color.');
+                            document.getElementById('background-type').value = 'color';
+                            localStorage.setItem('drcViewer-backgroundType', 'color');
+                            const fallbackColor = localStorage.getItem('drcViewer-backgroundColor') || '#1e2228';
+                            scene.background = new THREE.Color(fallbackColor);
+                            bgColorControls.style.display = 'block';
+                            renderer.toneMapping = THREE.NoToneMapping;
+                            // hideLoadingIndicator might be needed if showError doesn't fully cover the state
+                            // but showError should be sufficient as it manages loadingContainer and controlsPanel.
+                            if (!modelMesh) controlsPanel.style.display = 'none';
+                            renderScene();
+                        });
+                    break;
+            }
+            renderScene();
+        }
+
+        function updateBackgroundColor() {
+            const color = document.getElementById('background-color').value;
+            localStorage.setItem('drcViewer-backgroundColor', color);
+            if (document.getElementById('background-type').value === 'color') {
+                scene.background = new THREE.Color(color);
+                renderScene();
+            }
+        }
+
+        function setupUIControls() {
+            // Backface culling toggle
+            const backfaceCullingToggle = document.getElementById('toggle-backfaceculling');
+            const savedBackfaceCulling = localStorage.getItem('drcViewer-backfaceCulling');
+            if (savedBackfaceCulling !== null) {
+                backfaceCullingToggle.checked = (savedBackfaceCulling === 'true');
+            }
+            backfaceCullingToggle.addEventListener('change', updateBackfaceCulling);
+            
+            // Background type
+            const backgroundType = document.getElementById('background-type');
+            const backgroundColorControls = document.getElementById('background-color-controls');
+            const savedBackgroundType = localStorage.getItem('drcViewer-backgroundType');
+            if (savedBackgroundType) {
+                backgroundType.value = savedBackgroundType;
+            }
+            
+            backgroundType.addEventListener('change', updateBackgroundType);
+            
+            // Initialize visibility of color picker based on loaded or default selection
+            if (backgroundType.value === 'color') {
+                backgroundColorControls.style.display = 'block';
+            } else {
+                backgroundColorControls.style.display = 'none';
+            }
+
+            // Background color
+            const backgroundColorInput = document.getElementById('background-color');
+            const savedBackgroundColor = localStorage.getItem('drcViewer-backgroundColor');
+            if (savedBackgroundColor) {
+                backgroundColorInput.value = savedBackgroundColor;
+            }
+            backgroundColorInput.addEventListener('input', updateBackgroundColor);
+            backgroundColorInput.addEventListener('change', updateBackgroundColor);
+
+            // Collapsible panel setup
+            const collapseButton = document.getElementById('toggle-controls-panel-collapse');
+            const controlsContent = document.getElementById('controls-panel-content');
+
+            if (collapseButton && controlsContent) {
+                const initialCollapsedState = localStorage.getItem('drcViewer-controlsCollapsed') === 'true';
+                if (initialCollapsedState) {
+                    controlsContent.classList.add('collapsed');
+                    // collapseButton.textContent = 'Expand';
+                    collapseButton.classList.add('collapsed');
+                } else {
+                    controlsContent.classList.remove('collapsed');
+                    // collapseButton.textContent = 'Collapse';
+                    collapseButton.classList.remove('collapsed');
                 }
-            });
+
+                collapseButton.addEventListener('click', () => {
+                    controlsContent.classList.toggle('collapsed');
+                    const isCurrentlyCollapsed = controlsContent.classList.contains('collapsed');
+                    if (isCurrentlyCollapsed) {
+                        // collapseButton.textContent = 'Expand';
+                        collapseButton.classList.add('collapsed');
+                        localStorage.setItem('drcViewer-controlsCollapsed', 'true');
+                    } else {
+                        // collapseButton.textContent = 'Collapse';
+                        collapseButton.classList.remove('collapsed');
+                        localStorage.setItem('drcViewer-controlsCollapsed', 'false');
+                    }
+                });
+            }
+
+            // Initial application of settings if model already exists (e.g. page reload with model)
+            if (modelMesh) {
+                updateBackfaceCulling(); 
+            }
+            // updateBackgroundType(); // Called in init after setupUIControls
         }
 
         function onWindowResize() {
