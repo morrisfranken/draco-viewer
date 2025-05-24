@@ -192,43 +192,52 @@
             setupDragAndDrop();
             setupUIControls();
 
-            // Determine model to load from URL parameter or use default
-            let modelToLoad = 'model.drc'; // Default model if no other instruction
-            let displayName = "Default Model (model.drc)";
-            let displayPath = "model.drc"; // For the info container
-            let initialMessage = `Attempting to load ${displayName}`;
+            // Electron: Listen for file path from main process
+            if (window.electronAPI && typeof window.electronAPI.onLoadFile === 'function') {
+                window.electronAPI.onLoadFile(async (filePath) => {
+                    console.log('Renderer process: Received file path via IPC:', filePath);
+                    document.title = `Draco Viewer - ${filePath.split(/[/\\]/).pop()}`;
+                    updateLoadingProgress(`Reading file: ${filePath}...`, 0);
+                    try {
+                        console.log('Renderer process: Requesting file content for:', filePath);
+                        const result = await window.electronAPI.readFileContent(filePath);
+                        console.log('Renderer process: Received result from readFileContent for:', filePath, 'Success:', result.success);
 
-            const urlParams = new URLSearchParams(window.location.search);
-            const modelFromURL = urlParams.get('model');
-            const originalFilenameFromURL = urlParams.get('originalFilename');
-            const originalFullPathFromURL = urlParams.get('originalFullPath');
+                        if (result.success && result.data) {
+                            // result.data is a Buffer (or Uint8Array behaving like one) from the main process.
+                            // DRACOLoader.parse expects an ArrayBuffer.
+                            // Convert Node Buffer/Uint8Array to ArrayBuffer.
+                            const receivedBuffer = result.data; // This is a Uint8Array/Buffer
+                            const arrayBuffer = receivedBuffer.buffer.slice(
+                                receivedBuffer.byteOffset,
+                                receivedBuffer.byteOffset + receivedBuffer.byteLength
+                            );
+                            console.log('Renderer process: File content read and converted to ArrayBuffer, length:', arrayBuffer.byteLength);
+                            loadDracoModel(arrayBuffer, filePath); // Pass ArrayBuffer and full path
+                        } else {
+                            showError(`Error reading file content: ${result.error || 'Unknown error'}`);
+                        }
+                    } catch (error) {
+                        console.error('Renderer process: Error in onLoadFile processing:', error);
+                        showError(`Error processing file: ${error.message}`);
+                    }
+                });
+                // Initial message for Electron if no file is passed on startup
+                // This check needs to be robust enough if onLoadFile is async and modelMesh might not be set yet.
+                // A slight delay or a flag could be used, but for now, this assumes onLoadFile would execute quickly if a file was passed.
+                setTimeout(() => { // Add a small delay to allow initial IPC to potentially load a model
+                    if (!modelMesh) {
+                        updateLoadingProgress('Open a .drc file or drag & drop one here.', 0);
+                    }
+                }, 100);
 
-            if (modelFromURL) {
-                modelToLoad = decodeURIComponent(modelFromURL);
-                if (originalFilenameFromURL) {
-                    displayName = decodeURIComponent(originalFilenameFromURL); // Used for page title
-                } else if (modelToLoad === '_active_model.drc') {
-                    displayName = "Active Model"; 
-                } else {
-                    displayName = modelToLoad;
-                }
-
-                if (originalFullPathFromURL) {
-                    displayPath = decodeURIComponent(originalFullPathFromURL); // Used for info container
-                } else {
-                    displayPath = displayName; // Fallback to displayName if full path isn't provided
-                }
-                
-                initialMessage = `Loading: ${displayName}`;
-                console.log("Loading model from 'model' URL parameter:", modelToLoad, "Display name:", displayName, "Display path:", displayPath);
             } else {
-                displayPath = "model.drc"; // Default display path
-                console.log("No 'model' URL parameter, will attempt to load default:", modelToLoad);
+                // Fallback for non-Electron environment (e.g. browser serving the page)
+                console.warn("Electron API not found. Running in browser mode. Please drag & drop a .drc file.");
+                updateLoadingProgress('Drag & drop a .drc model to view.', 0);
+                // Do not attempt to load a default model from a relative path.
+                // The loading indicator will stay until a file is dropped.
             }
-            
-            document.title = `Draco Viewer - ${displayName}`;
-            updateLoadingProgress(initialMessage, 0);
-            loadDracoModel(modelToLoad, displayPath); // Pass displayPath to be shown in info container
 
             window.addEventListener('resize', onWindowResize, false);
         }
@@ -246,8 +255,10 @@
         }
 
         function showError(message) {
+            loadingContainer.style.display = 'block'; // Ensure loading container is visible for errors
             loadingText.innerText = message;
             progressBar.style.width = '0%';
+            progressBar.style.backgroundColor = '#F44336'; // Optional: Error color for progress bar
             console.error(message);
             controlsPanel.style.display = 'none';
             modelInfoContainer.style.display = 'none';
@@ -266,10 +277,11 @@
             document.title = "Draco Viewer";
         }
 
-        function loadDracoModel(source, displayInfo) { // Renamed displayName to displayInfo
+        function loadDracoModel(source, displayInfo) { // displayInfo is now full path or filename
             clearScene();
+            progressBar.style.backgroundColor = '#4CAF50'; // Reset progress bar color on new load
             
-            const loadingMessage = displayInfo ? `Preparing to load ${displayInfo}...` : 'Preparing to load...';
+            const loadingMessage = displayInfo ? `Preparing to load ${displayInfo.split(/[/\\]/).pop()}...` : 'Preparing to load...';
             updateLoadingProgress(loadingMessage, 0);
 
             // Set page title based on displayInfo if it's likely a filename, or a generic part of it
@@ -285,6 +297,11 @@
                 updateLoadingProgress('Decoding complete. Building scene...', 100);
                 
                 setTimeout(() => {
+                    if (!geometry) { // Should be caught by parse's error callback, but as a safeguard
+                        showError("Failed to decode model: Geometry is null.");
+                        if (dracoLoader) dracoLoader.dispose();
+                        return;
+                    }
                     geometry.computeVertexNormals();
                     const material = new THREE.MeshStandardMaterial({
                         color: 0xd1d1d1,
@@ -357,19 +374,31 @@
             const onProgress = function (xhr) {
                 if (xhr.lengthComputable) {
                     const percentComplete = xhr.loaded / xhr.total * 100;
-                    updateLoadingProgress('Downloading model...', percentComplete);
+                    updateLoadingProgress(`Downloading model... (${Math.round(percentComplete)}%)`, percentComplete);
                 } else {
-                    updateLoadingProgress('Downloading model...', 0);
+                    updateLoadingProgress('Downloading model... (progress unknown)', 0); // Or some indeterminate state
                 }
             };
             
             const onError = function (error) {
                 // Simplified error handling
-                showError('Error loading Draco model. ' + (error.message ? error.message : error) );
+                let errorMessage = 'Error loading Draco model.';
+                if (error instanceof Error) {
+                    errorMessage += ` ${error.message}`;
+                } else if (typeof error === 'string') {
+                    errorMessage += ` ${error}`;
+                } else if (error && error.target && error.target.statusText && error.target.status !== 200) {
+                    errorMessage += ` Network error: ${error.target.status} ${error.target.statusText}`;
+                } else {
+                    errorMessage += ` An unknown error occurred.`;
+                }
+                console.error('DracoLoader error details:', error);
+                showError(errorMessage);
+                if (dracoLoader) dracoLoader.dispose();
             };
 
             if (typeof source === 'string' && source.trim() !== '') { // Ensure source is not empty
-                updateLoadingProgress('Downloading model...', 0);
+                updateLoadingProgress(`Downloading ${displayInfo ? displayInfo.split(/[/\\]/).pop() : source}...`, 0);
                 const cacheBustedSource = source + '?v=' + new Date().getTime();
                 dracoLoader.load(cacheBustedSource, onLoad, onProgress, 
                     (err) => {
@@ -387,23 +416,28 @@
                             if (geometry) {
                                 onLoad(geometry);
                             } else {
-                                // This case should ideally be caught by the error callback of parse
-                                onError(new Error("DRACOLoader.parse returned null geometry unexpectedly."));
+                                onError(new Error("DRACOLoader.parse returned null or invalid geometry."));
                             }
-                            dracoLoader.dispose(); // Dispose after processing
                         },
                         function (error) { // Error callback
                             console.error('DracoLoader.parse error:', error);
                             onError(error || new Error("DRACOLoader.parse failed."));
-                            dracoLoader.dispose(); // Dispose after error
                         }
                     );
                 } catch (e) {
                     // This catch is a fallback, most errors should be caught by parse's error callback
                     console.error('Unexpected error during dracoLoader.parse setup:', e);
                     onError(e);
-                    if (dracoLoader) dracoLoader.dispose(); // Ensure dispose on unexpected error
+                } finally {
+                    // Ensure dispose is called if dracoLoader was used for parsing
+                    // For .load(), dispose is handled internally or if an error occurs.
+                    // For .parse(), we need to manage it.
+                    if (dracoLoader && source instanceof ArrayBuffer) {
+                         dracoLoader.dispose();
+                    }
                 }
+            } else if (!source) {
+                showError("No model source provided to loadDracoModel.");
             }
         }
 
@@ -432,12 +466,13 @@
                         const reader = new FileReader();
                         reader.onload = function(e) {
                             const droppedFilename = file.name;
-                            // For drag-and-drop, we only have the filename, not the full path
+                            // For drag-and-drop, we only have the filename
                             document.title = `Draco Viewer - ${droppedFilename}`;
-                            loadDracoModel(e.target.result, droppedFilename); // Pass filename as displayInfo
+                            updateLoadingProgress(`Loading ${droppedFilename}...`, 0); // Show loading message for dropped file
+                            loadDracoModel(e.target.result, droppedFilename); 
                         };
                         reader.onerror = function(e) {
-                            showError('Error reading file.');
+                            showError('Error reading dropped file.');
                         }
                         reader.readAsArrayBuffer(file);
                     } else {
