@@ -1,0 +1,12 @@
+version: '3.8'
+services:
+  web:
+    image: nginx:alpine
+    ports:
+      - "54080:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf
+      - ./index.html:/usr/share/nginx/html/index.html
+      - ./drc-viewer.svg:/usr/share/nginx/html/drc-viewer.svg
+      - ./drc-viewer.png:/usr/share/nginx/html/drc-viewer.png
+      - ./main.js:/usr/share/nginx/html/main.js
