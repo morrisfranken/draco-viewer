@@ -12,7 +12,7 @@ let filePathToLoad = null;
 // If opened via protocol handler or .desktop file with %U, it might be different.
 // We'll check for arguments that look like file paths.
 const args = process.argv.slice(app.isPackaged ? 1 : 2); // Adjust slice depending on packaged or dev
-const potentialFileArg = args.find(arg => !arg.startsWith('--') && fs.existsSync(arg) && arg.toLowerCase().endsWith('.drc'));
+const potentialFileArg = args.find(arg => !arg.startsWith('--') && fs.existsSync(arg) && (arg.toLowerCase().endsWith('.drc') || arg.toLowerCase().endsWith('.glb')));
 if (potentialFileArg) {
   filePathToLoad = potentialFileArg;
 }

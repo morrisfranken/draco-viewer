@@ -14,6 +14,15 @@ SCRIPT_SOURCE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # Adjust ELECTRON_APP_SOURCE_DIR to point to the parent directory of SCRIPT_SOURCE_DIR
 ELECTRON_APP_SOURCE_DIR="$(cd "$SCRIPT_SOURCE_DIR/.." && pwd)"
 
+MIME_TYPES_TO_REGISTER=("application/x-drc" "model/gltf-binary")
+DESKTOP_FILE_MIME_TYPE_STRING="application/x-drc;model/gltf-binary;"
+ICON_NAME="drc-viewer"
+SOURCE_ICON_FILE="drc-viewer.png"
+
+SCRIPT_SOURCE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Adjust ELECTRON_APP_SOURCE_DIR to point to the parent directory of SCRIPT_SOURCE_DIR
+ELECTRON_APP_SOURCE_DIR="$(cd "$SCRIPT_SOURCE_DIR/.." && pwd)"
+
 echo "DRC Viewer (Electron) Installer"
 echo "-------------------------------"
 echo "This script will install the DRC Viewer Electron app for the current user."
@@ -95,34 +104,50 @@ cat << EOF > "$DESKTOP_FILE_DIR/$DESKTOP_FILE_NAME"
 [Desktop Entry]
 Version=1.0
 Name=DRC Viewer (Electron)
-Comment=View .drc 3D models with Electron
+Comment=View .drc and .glb 3D models with Electron
 Exec=$LAUNCHER_SCRIPT_PATH %F
 Icon=$ICON_NAME
 Terminal=false
 Type=Application
-MimeType=$MIME_TYPE;
+MimeType=$DESKTOP_FILE_MIME_TYPE_STRING
 Categories=Graphics;Viewer;3DGraphics;
-Keywords=3D;model;viewer;draco;drc;electron;
+Keywords=3D;model;viewer;draco;drc;glb;gltf;electron;
 StartupNotify=false
 EOF
 echo ".desktop file created."
 
-# Create custom MIME type XML (remains the same)
+# Create custom MIME type XML for .drc
 MIME_PACKAGES_DIR="$HOME/.local/share/mime/packages"
 mkdir -p "$MIME_PACKAGES_DIR"
-echo "Creating MIME type definition at $MIME_PACKAGES_DIR/$MIME_XML_FILE..."
+echo "Creating MIME type definition for .drc at $MIME_PACKAGES_DIR/$MIME_XML_FILE..."
 cat << EOF > "$MIME_PACKAGES_DIR/$MIME_XML_FILE"
 <?xml version="1.0" encoding="UTF-8"?>
 <mime-info xmlns="http://www.freedesktop.org/standards/shared-mime-info">
-  <mime-type type="$MIME_TYPE">
-    <comment>Draco 3D Model File</comment>
-    <icon name="$ICON_NAME"/> <!-- Use the custom icon name -->
+  <mime-type type="application/x-drc">
+    <comment>Draco 3D Model</comment>
     <glob pattern="*.drc"/>
-    <glob pattern="*.DRC"/>
+    <icon name="$ICON_NAME"/>
   </mime-type>
 </mime-info>
 EOF
-echo "MIME type definition created."
+echo "MIME type definition for .drc created."
+
+# Create custom MIME type XML for .glb (model/gltf-binary)
+# Note: model/gltf-binary is a standard MIME type, but we ensure it's associated with our app and icon.
+GLB_MIME_XML_FILE="model-gltf-binary.xml"
+echo "Creating/Updating MIME type definition for .glb at $MIME_PACKAGES_DIR/$GLB_MIME_XML_FILE..."
+cat << EOF > "$MIME_PACKAGES_DIR/$GLB_MIME_XML_FILE"
+<?xml version="1.0" encoding="UTF-8"?>
+<mime-info xmlns="http://www.freedesktop.org/standards/shared-mime-info">
+  <mime-type type="model/gltf-binary">
+    <comment>GLB 3D Model</comment>
+    <glob pattern="*.glb"/>
+    <icon name="$ICON_NAME"/>
+  </mime-type>
+</mime-info>
+EOF
+echo "MIME type definition for .glb created/updated."
+
 
 # Update MIME database
 echo "Updating MIME database for the user..."
@@ -141,14 +166,16 @@ else
     echo "Warning: gtk-update-icon-cache not found."
 fi
 
-# Set the new application as the default for the MIME type
-echo "Setting $APP_NAME as default for $MIME_TYPE files..."
-xdg-mime default "$DESKTOP_FILE_NAME" "$MIME_TYPE"
-if [ $? -ne 0 ]; then
-    echo "Warning: Failed to set default application using xdg-mime."
-else
-    echo "$APP_NAME set as default for $MIME_TYPE."
-fi
+# Set the new application as the default for the MIME types
+for MIME_TYPE in "${MIME_TYPES_TO_REGISTER[@]}"; do
+    echo "Setting $APP_NAME as default for $MIME_TYPE files..."
+    xdg-mime default "$DESKTOP_FILE_NAME" "$MIME_TYPE"
+    if [ $? -ne 0 ]; then
+        echo "Warning: Failed to set default application for $MIME_TYPE using xdg-mime."
+    else
+        echo "$APP_NAME set as default for $MIME_TYPE."
+    fi
+done
 
 echo ""
 echo "Electron Installation complete!"
@@ -156,11 +183,11 @@ echo "--------------------"
 echo "To use the viewer:"
 echo "1. Ensure Node.js, npm/yarn are installed."
 echo "2. Navigate to '$ELECTRON_APP_SOURCE_DIR' and run 'npm install' if you haven't already."
-echo "3. You should now be able to double-click .drc files to open them."
+echo "3. You should now be able to double-click .drc or .glb files to open them."
 echo "   Or run from terminal: cd '$ELECTRON_APP_SOURCE_DIR' && npm start -- /path/to/your/model.drc"
 echo ""
 echo "IMPORTANT FOR FILE ICONS:"
-echo "If the custom icon for .drc files does not appear immediately in your file manager,"
+echo "If the custom icon for .drc or .glb files does not appear immediately in your file manager,"
 echo "please log out and log back in, or restart your computer."
 echo "This is often necessary for the desktop environment to fully recognize new icon associations."
 echo ""

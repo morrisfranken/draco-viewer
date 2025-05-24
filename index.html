@@ -270,7 +270,7 @@
     </div>
     
     <!-- Drop zone text -->
-    <div id="drop-zone-text">Drop .drc file here</div>
+    <div id="drop-zone-text">Drop .drc or .glb file here</div>
 
     <!-- Model info container -->
     <div id="model-info-container">
@@ -331,6 +331,7 @@
         import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
         import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
         import { RGBELoader } from 'three/addons/loaders/RGBELoader.js'; // Added for HDR
+        import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'; // Added for GLB support
 
         let scene, camera, renderer, controls, directionalLight, modelMesh, ambientLight, hemisphereLight;
         // let gradientTexture; // Removed gradientTexture
@@ -345,8 +346,24 @@
         const dracoLoader = new DRACOLoader();
         dracoLoader.setDecoderPath('https://www.gstatic.com/draco/versioned/decoders/1.5.6/');
         dracoLoader.setDecoderConfig({ type: 'wasm' });
+        
+        // Initialize GLTFLoader with DRACOLoader for Draco-encoded GLB files
+        const gltfLoader = new GLTFLoader();
+        gltfLoader.setDRACOLoader(dracoLoader);
 
         let isElectronLoadingFile = false; // Flag for Electron file loading state
+        
+        // Function to center a model at the origin using its bounding box
+        function centerModel(object) {
+            const boundingBox = new THREE.Box3().setFromObject(object);
+            const center = boundingBox.getCenter(new THREE.Vector3());
+            object.position.sub(center); // Move the object so its geometric center is at the origin
+
+            if (controls) {
+                controls.target.set(0, 0, 0); // Aim controls at the new center (origin)
+                controls.update();
+            }
+        }
         
         function init() {
             // Create gradient texture - REMOVED
@@ -410,7 +427,17 @@
                                 receivedBuffer.byteOffset + receivedBuffer.byteLength
                             );
                             console.log('Renderer process: File content read and converted to ArrayBuffer, length:', arrayBuffer.byteLength);
-                            loadDracoModel(arrayBuffer, filePath); // This will set its own progress messages
+                            
+                            // Determine which loader to use based on file extension
+                            const fileName = filePath.toLowerCase();
+                            if (fileName.endsWith('.drc')) {
+                                loadDracoModel(arrayBuffer, filePath);
+                            } else if (fileName.endsWith('.glb')) {
+                                loadGLBModel(arrayBuffer, filePath);
+                            } else {
+                                showError(`Unsupported file format: ${filePath}`);
+                                isElectronLoadingFile = false;
+                            }
                         } else {
                             showError(`Error reading file content: ${result.error || 'Unknown error'}`);
                             isElectronLoadingFile = false; // Reset flag on error
@@ -655,6 +682,135 @@
             }
         }
 
+        // New function to load GLB models with support for Draco compression
+        function loadGLBModel(source, displayInfo) {
+            clearScene();
+            progressBar.style.backgroundColor = '#4CAF50';
+            
+            if(displayInfo) {
+                let titleName = displayInfo;
+                if (displayInfo.includes('/') || displayInfo.includes('\\')) { 
+                    titleName = displayInfo.split(/[\/\\]/).pop();
+                }
+                document.title = `Draco Viewer - ${titleName}`;
+                currentModelNameSpan.textContent = titleName;
+                currentModelNameSpan.title = displayInfo;
+                modelInfoContainer.style.display = 'block';
+            }
+
+            const handleGLBLoadSuccess = function (gltf) {
+                updateLoadingProgress('GLB loaded. Building scene...', 100);
+                
+                setTimeout(() => {
+                    if (!gltf || !gltf.scene) {
+                        handleGLBLoadError("Failed to load GLB: Model is null or has no scene.");
+                        return;
+                    }
+                    
+                    // Set the entire GLB scene as the model mesh
+                    modelMesh = gltf.scene;
+                    
+                    // Set shadow properties for all meshes in the scene
+                    modelMesh.traverse(function (child) {
+                        if (child.isMesh) {
+                            child.castShadow = true;
+                            child.receiveShadow = true;
+                            
+                            // Apply backface culling setting if material exists
+                            if (child.material) {
+                                if (Array.isArray(child.material)) {
+                                    child.material.forEach(mat => {
+                                        mat.side = document.getElementById('toggle-backfaceculling').checked ? THREE.FrontSide : THREE.DoubleSide;
+                                    });
+                                } else {
+                                    child.material.side = document.getElementById('toggle-backfaceculling').checked ? THREE.FrontSide : THREE.DoubleSide;
+                                }
+                            }
+                        }
+                    });
+                    
+                    scene.add(modelMesh);
+                    
+                    // Center the model at origin
+                    centerModel(modelMesh);
+                    
+                    // Calculate bounding box for camera positioning
+                    const box = new THREE.Box3().setFromObject(modelMesh);
+                    const modelSize = new THREE.Vector3();
+                    box.getSize(modelSize);
+                    const modelCenter = new THREE.Vector3();
+                    box.getCenter(modelCenter);
+
+                    // Update controls target to model center
+                    controls.target.copy(modelCenter);
+                    
+                    // Position camera based on model size
+                    const fov = camera.fov * (Math.PI / 180);
+                    const effectiveModelSize = Math.max(modelSize.x, modelSize.y, modelSize.z) || 1;
+                    const distance = (effectiveModelSize / 2) / Math.tan(fov / 2);
+
+                    camera.position.set(
+                        modelCenter.x,
+                        modelCenter.y + effectiveModelSize * 0.3,
+                        modelCenter.z + distance * 1.5
+                    );
+                    camera.lookAt(modelCenter);
+
+                    // Set camera constraints based on model size
+                    controls.minDistance = effectiveModelSize / 10;
+                    controls.maxDistance = effectiveModelSize * 10;
+                    controls.update();
+                    
+                    directionalLight.target = modelMesh;
+                    
+                    isElectronLoadingFile = false;
+                    hideLoadingIndicator();
+                    renderScene();
+                }, 10);
+            };
+
+            const onGLBDownloadProgress = function (xhr) {
+                if (xhr.lengthComputable) {
+                    const percentComplete = xhr.loaded / xhr.total * 100;
+                    updateLoadingProgress(`Downloading GLB... (${Math.round(percentComplete)}%)`, percentComplete);
+                } else {
+                    updateLoadingProgress('Downloading GLB... (progress unknown)', 0);
+                }
+            };
+            
+            const handleGLBLoadError = function (error) {
+                let errorMessage = 'Error loading GLB model.';
+                if (error instanceof Error) {
+                    errorMessage += ` ${error.message}`;
+                } else if (typeof error === 'string') {
+                    errorMessage += ` ${error}`;
+                } else if (error && error.target && error.target.statusText && error.target.status !== 200) {
+                    errorMessage += ` Network error: ${error.target.status} ${error.target.statusText}`;
+                } else {
+                    errorMessage += ` An unknown error occurred.`;
+                }
+                console.error('GLTFLoader error details:', error);
+                isElectronLoadingFile = false;
+                showError(errorMessage);
+            };
+
+            if (typeof source === 'string' && source.trim() !== '') {
+                updateLoadingProgress(`Downloading ${displayInfo ? displayInfo.split(/[\/\\]/).pop() : source}...`, 0);
+                const cacheBustedSource = source + '?v=' + new Date().getTime();
+                gltfLoader.load(cacheBustedSource, handleGLBLoadSuccess, onGLBDownloadProgress, handleGLBLoadError);
+            } else if (source instanceof ArrayBuffer) {
+                updateLoadingProgress('Parsing GLB file...', 50);
+                try {
+                    gltfLoader.parse(source, '', handleGLBLoadSuccess, handleGLBLoadError);
+                } catch (e) {
+                    console.error('Unexpected error during gltfLoader.parse setup:', e);
+                    handleGLBLoadError(e);
+                }
+            } else if (!source) {
+                handleGLBLoadError("No model source provided to loadGLBModel.");
+            }
+        }
+
         function setupDragAndDrop() {
             const body = document.body;
             body.addEventListener('dragover', function(event) {
@@ -676,21 +832,34 @@
 
                 if (event.dataTransfer.files.length > 0) {
                     const file = event.dataTransfer.files[0];
-                    if (file.name.toLowerCase().endsWith('.drc')) {
+                    const fileName = file.name.toLowerCase();
+                    
+                    if (fileName.endsWith('.drc')) {
                         const reader = new FileReader();
                         reader.onload = function(e) {
                             const droppedFilename = file.name;
-                            // For drag-and-drop, we only have the filename
                             document.title = `Draco Viewer - ${droppedFilename}`;
-                            updateLoadingProgress(`Loading ${droppedFilename}...`, 0); // Show loading message for dropped file
+                            updateLoadingProgress(`Loading ${droppedFilename}...`, 0);
                             loadDracoModel(e.target.result, droppedFilename); 
                         };
                         reader.onerror = function(e) {
                             showError('Error reading dropped file.');
                         }
                         reader.readAsArrayBuffer(file);
+                    } else if (fileName.endsWith('.glb')) {
+                        const reader = new FileReader();
+                        reader.onload = function(e) {
+                            const droppedFilename = file.name;
+                            document.title = `Draco Viewer - ${droppedFilename}`;
+                            updateLoadingProgress(`Loading ${droppedFilename}...`, 0);
+                            loadGLBModel(e.target.result, droppedFilename);
+                        };
+                        reader.onerror = function(e) {
+                            showError('Error reading dropped file.');
+                        }
+                        reader.readAsArrayBuffer(file);
                     } else {
-                        showError('Please drop a .drc file.');
+                        showError('Please drop a .drc or .glb file.');
                     }
                 }
             });
