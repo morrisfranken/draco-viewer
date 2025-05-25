@@ -35,6 +35,39 @@
             font-weight: 500;
         }
         
+        /* Welcome message styling */
+        #loading-text h3 {
+            font-size: 24px;
+            margin: 0 0 20px 0;
+            color: #fff;
+            font-weight: 500;
+            letter-spacing: 0.5px;
+        }
+        
+        .supported-formats {
+            font-size: 18px;
+            margin-bottom: 15px;
+            line-height: 1.6;
+        }
+        
+        .format {
+            display: inline-block;
+            background: linear-gradient(135deg, #4776e6, #8e54e9);
+            padding: 5px 12px;
+            border-radius: 20px;
+            margin: 5px 5px;
+            color: white;
+            font-weight: bold;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+        }
+        
+        .format-info {
+            color: #aab2c0;
+            font-size: 14px;
+            margin-top: 10px;
+            font-style: italic;
+        }
+        
         #progress-bar-container {
             width: 100%;
             background-color: #2c3038;
@@ -270,7 +303,7 @@
     </div>
     
     <!-- Drop zone text -->
-    <div id="drop-zone-text">Drop .drc or .glb file here</div>
+    <div id="drop-zone-text">Drop .drc (mesh or point cloud) or .glb file here</div>
 
     <!-- Model info container -->
     <div id="model-info-container">
@@ -422,6 +455,19 @@
 
                         if (result.success && result.data) {
                             const receivedBuffer = result.data;
+                            
+                            // Verify that we received valid buffer data
+                            if (!receivedBuffer || !receivedBuffer.buffer) {
+                                console.error('Renderer process: Invalid buffer received:', receivedBuffer);
+                                showError('Invalid file data received');
+                                isElectronLoadingFile = false;
+                                return;
+                            }
+                            
+                            console.log('Renderer process: Buffer received:', 
+                                        'byteLength:', receivedBuffer.byteLength,
+                                        'type:', Object.prototype.toString.call(receivedBuffer));
+                            
                             const arrayBuffer = receivedBuffer.buffer.slice(
                                 receivedBuffer.byteOffset,
                                 receivedBuffer.byteOffset + receivedBuffer.byteLength
@@ -452,8 +498,8 @@
                 setTimeout(() => {
                     // Show initial message if no model, Electron isn't loading, and HDR isn't loading
                     if (!modelMesh && !isElectronLoadingFile && 
-                        (!loadingText.innerText || !loadingText.innerText.includes('Loading HDR'))) {
-                        updateLoadingProgress('Open a .drc file or drag & drop one here.', 0);
+                        (!loadingText.innerHTML || !loadingText.innerHTML.includes('Loading HDR'))) {
+                        updateLoadingProgress('<h3>Welcome to Draco Viewer</h3><p class="supported-formats">Drag & drop your 3D models here to begin.</p><div class="supported-formats">Supported: <span class="format">.drc</span> <span class="format">.glb</span></div><div class="format-info">View Draco compressed meshes, point clouds, and GLB/glTF files with textures.</div>', 0);
                     }
                 }, 300); // Delay to allow other initial processes to set messages
 
@@ -461,7 +507,7 @@
                 // Fallback for non-Electron environment
                 console.warn("Electron API not found. Running in browser mode. Please drag & drop a .drc file.");
                 if (!modelMesh && localStorage.getItem('drcViewer-backgroundType') !== 'hdr') {
-                    updateLoadingProgress('Drag & drop a .drc model to view.', 0);
+                    updateLoadingProgress('<h3>Welcome to Draco Viewer</h3><p class="supported-formats">Drag & drop your 3D models here to begin.</p><div class="supported-formats">Supported: <span class="format">.drc</span> <span class="format">.glb</span></div><div class="format-info">View Draco compressed meshes, point clouds, and GLB/glTF files with textures.</div>', 0);
                 }
             }
 
@@ -470,7 +516,7 @@
 
         function updateLoadingProgress(text, percentage) {
             loadingContainer.style.display = 'block';
-            loadingText.innerText = text;
+            loadingText.innerHTML = text; // Changed from innerText to innerHTML
             progressBar.style.width = percentage + '%';
         }
 
@@ -501,14 +547,14 @@
                     // Do not hide loadingContainer or show a generic prompt.
                     // Ensure loadingContainer is visible if it was showing Electron's progress.
                     if (loadingContainer.style.display === 'none' && 
-                        (loadingText.innerText.includes('Reading file') || loadingText.innerText.includes('Decoding model'))) {
+                        (loadingText.innerHTML.includes('Reading file') || loadingText.innerHTML.includes('Decoding model'))) {
                          loadingContainer.style.display = 'block'; // Re-show if accidentally hidden
                     }
                 } else {
                     // No Electron file loading, and no model.
                     // Show the generic "Drag & drop" prompt, unless HDR is actively loading.
-                    if (!loadingText.innerText || !loadingText.innerText.includes('Loading HDR')) {
-                        updateLoadingProgress('Drag & drop a .drc model to view.', 0);
+                    if (!loadingText.innerHTML || !loadingText.innerHTML.includes('Loading HDR')) {
+                        updateLoadingProgress('<h3>Welcome to Draco Viewer</h3><p class="supported-formats">Drag & drop your 3D models here to begin.</p><div class="supported-formats">Supported: <span class="format">.drc</span> <span class="format">.glb</span></div><div class="format-info">View Draco compressed meshes, point clouds, and GLB/glTF files with textures.</div>', 0);
                         loadingContainer.style.display = 'block'; // Ensure prompt is visible
                     }
                 }
@@ -528,10 +574,40 @@
         function clearScene() {
             if (modelMesh) {
                 scene.remove(modelMesh);
-                modelMesh.geometry.dispose();
-                modelMesh.material.dispose();
+                
+                // Handle geometry disposal based on model type
+                if (modelMesh instanceof THREE.Mesh || modelMesh instanceof THREE.Points) {
+                    if (modelMesh.geometry) modelMesh.geometry.dispose();
+                    if (modelMesh.material) {
+                        if (Array.isArray(modelMesh.material)) {
+                            modelMesh.material.forEach(m => m.dispose());
+                        } else {
+                            modelMesh.material.dispose();
+                        }
+                    }
+                } else {
+                    // For GLB scenes, traverse and dispose all materials and geometries
+                    modelMesh.traverse((child) => {
+                        if (child.geometry) child.geometry.dispose();
+                        if (child.material) {
+                            if (Array.isArray(child.material)) {
+                                child.material.forEach(m => m.dispose());
+                            } else {
+                                child.material.dispose();
+                            }
+                        }
+                    });
+                }
+                
                 modelMesh = null;
             }
+            
+            // Hide point size controls
+            const pointSizeSection = document.getElementById('point-size-section');
+            if (pointSizeSection) {
+                pointSizeSection.style.display = 'none';
+            }
+            
             modelInfoContainer.style.display = 'none';
             currentModelNameSpan.textContent = '';
             currentModelNameSpan.title = ''; // Clear tooltip
@@ -561,10 +637,55 @@
                         handleModelLoadError("Failed to decode model: Geometry is null.");
                         return;
                     }
-                    geometry.computeVertexNormals();
                     
-                    const material = createModelMaterial();
-                    modelMesh = new THREE.Mesh(geometry, material);
+                    // Check if it's a point cloud
+                    const isPCloud = isPointCloud(geometry);
+                    
+                    // Handle colors if available in geometry
+                    let material;
+                    if (geometry.attributes.color) {
+                        if (isPCloud) {
+                            material = new THREE.PointsMaterial({
+                                size: 0.01,
+                                vertexColors: true
+                            });
+                        } else {
+                            material = createModelMaterial();
+                            material.vertexColors = true;
+                        }
+                    } else {
+                        if (isPCloud) {
+                            material = new THREE.PointsMaterial({
+                                size: 0.01,
+                                color: 0xd1d1d1
+                            });
+                        } else {
+                            material = createModelMaterial();
+                        }
+                    }
+                    
+                    // For point clouds, use Points instead of Mesh
+                    if (isPCloud) {
+                        geometry.computeVertexNormals();
+                        modelMesh = new THREE.Points(geometry, material);
+                        console.log('Loaded as point cloud');
+                        
+                        // Show point size controls for point clouds
+                        const pointSizeSection = document.getElementById('point-size-section');
+                        if (pointSizeSection) {
+                            pointSizeSection.style.display = 'block';
+                        }
+                    } else {
+                        geometry.computeVertexNormals();
+                        modelMesh = new THREE.Mesh(geometry, material);
+                        console.log('Loaded as mesh');
+                        
+                        // Hide point size controls for regular meshes
+                        const pointSizeSection = document.getElementById('point-size-section');
+                        if (pointSizeSection) {
+                            pointSizeSection.style.display = 'none';
+                        }
+                    }
                     scene.add(modelMesh);
 
                     // ... (rest of existing model setup: bounding box, scaling, camera, etc.)
@@ -710,6 +831,12 @@
                     // Set the entire GLB scene as the model mesh
                     modelMesh = gltf.scene;
                     
+                    // Hide point size controls for GLB models
+                    const pointSizeSection = document.getElementById('point-size-section');
+                    if (pointSizeSection) {
+                        pointSizeSection.style.display = 'none';
+                    }
+                    
                     // Set shadow properties for all meshes in the scene
                     modelMesh.traverse(function (child) {
                         if (child.isMesh) {
@@ -818,17 +945,31 @@
                 event.dataTransfer.dropEffect = 'copy';
                 dropZoneText.style.display = 'block';
                 body.style.backgroundColor = '#3a3f4a';
+                if (loadingContainer) {
+                    loadingContainer.style.pointerEvents = 'none';
+                }
             });
 
             body.addEventListener('dragleave', function(event) {
-                dropZoneText.style.display = 'none';
-                body.style.backgroundColor = '#282c34';
+                // Check if the mouse is truly leaving the body, not just moving to a child
+                // With pointer-events: none on children, this check might be less critical,
+                // but it's good for robustness.
+                if (event.relatedTarget === null || !body.contains(event.relatedTarget)) {
+                    dropZoneText.style.display = 'none';
+                    body.style.backgroundColor = '#1e2228'; // Reset to original or desired non-dragover color
+                    if (loadingContainer) {
+                        loadingContainer.style.pointerEvents = 'auto';
+                    }
+                }
             });
 
             body.addEventListener('drop', function(event) {
                 event.preventDefault();
                 dropZoneText.style.display = 'none';
-                body.style.backgroundColor = '#282c34';
+                body.style.backgroundColor = '#1e2228'; // Reset to original or desired non-dragover color
+                if (loadingContainer) {
+                    loadingContainer.style.pointerEvents = 'auto';
+                }
 
                 if (event.dataTransfer.files.length > 0) {
                     const file = event.dataTransfer.files[0];
@@ -863,8 +1004,23 @@
                     }
                 }
             });
+
+            // Add a global dragend listener to handle cases where drag is cancelled
+            document.addEventListener('dragend', function(event) {
+                dropZoneText.style.display = 'none';
+                body.style.backgroundColor = '#1e2228'; // Reset to original or desired non-dragover color
+                if (loadingContainer) {
+                    loadingContainer.style.pointerEvents = 'auto';
+                }
+            }, false);
         }
 
+        function isPointCloud(geometry) {
+            // Check if it's a point cloud by detecting if there are no indices (no faces)
+            // BufferGeometry with no indices typically represents a point cloud
+            return !geometry.index && geometry.attributes.position;
+        }
+        
         function createModelMaterial() {
             const material = new THREE.MeshStandardMaterial({
                 color: 0xd1d1d1, // Keep a default color
@@ -879,8 +1035,11 @@
         function updateBackfaceCulling() {
             if (modelMesh) {
                 const isChecked = document.getElementById('toggle-backfaceculling').checked;
-                modelMesh.material.side = isChecked ? THREE.FrontSide : THREE.DoubleSide;
-                modelMesh.material.needsUpdate = true;
+                // Only apply side property if it's a mesh, not points
+                if (modelMesh instanceof THREE.Mesh) {
+                    modelMesh.material.side = isChecked ? THREE.FrontSide : THREE.DoubleSide;
+                    modelMesh.material.needsUpdate = true;
+                }
                 localStorage.setItem('drcViewer-backfaceCulling', isChecked);
                 renderScene();
             }
@@ -910,8 +1069,8 @@
                     // Only show HDR loading message if Electron isn't primary or its message isn't active
                     if (!isElectronLoadingFile || 
                         (isElectronLoadingFile && !modelMesh && 
-                         !loadingText.innerText.includes('Reading file') && 
-                         !loadingText.innerText.includes('Decoding model'))) {
+                         !loadingText.innerHTML.includes('Reading file') && 
+                         !loadingText.innerHTML.includes('Decoding model'))) {
                         updateLoadingProgress('Loading HDR background...', 0);
                     }
                     new RGBELoader()
@@ -921,7 +1080,7 @@
                             scene.background = texture;
                             scene.environment = texture;
                             // Show HDR loaded message briefly, respecting Electron loading state
-                            if (!isElectronLoadingFile || (isElectronLoadingFile && !modelMesh && !loadingText.innerText.includes('Decoding model'))) {
+                            if (!isElectronLoadingFile || (isElectronLoadingFile && !modelMesh && !loadingText.innerHTML.includes('Decoding model'))) {
                                 updateLoadingProgress('HDR background loaded.', 100);
                             }
                             setTimeout(() => {
@@ -930,7 +1089,7 @@
                             }, 500);
                         }, 
                         (xhr) => { // onProgress for HDR
-                            if (!isElectronLoadingFile || (isElectronLoadingFile && !modelMesh && !loadingText.innerText.includes('Decoding model'))) {
+                            if (!isElectronLoadingFile || (isElectronLoadingFile && !modelMesh && !loadingText.innerHTML.includes('Decoding model'))) {
                                 if (xhr.lengthComputable) {
                                     const percentComplete = xhr.loaded / xhr.total * 100;
                                     updateLoadingProgress(`Loading HDR... (${Math.round(percentComplete)}%)`, percentComplete);
@@ -968,6 +1127,36 @@
         }
 
         function setupUIControls() {
+            // Point size control section for point clouds
+            const controlsContent = document.getElementById('controls-panel-content');
+            
+            // Add point size section if it doesn't exist
+            if (!document.getElementById('point-size-section')) {
+                const pointSizeSection = document.createElement('div');
+                pointSizeSection.className = 'control-section';
+                pointSizeSection.id = 'point-size-section';
+                pointSizeSection.style.display = 'none'; // Hide by default, shown only for point clouds
+                pointSizeSection.innerHTML = `
+                    <h4>Point Cloud</h4>
+                    <div>
+                        <label for="point-size">Point Size: <span class="range-value" id="point-size-value">0.01</span></label>
+                        <input type="range" id="point-size" min="0.001" max="0.05" step="0.001" value="0.01">
+                    </div>
+                `;
+                controlsContent.appendChild(pointSizeSection);
+                
+                const pointSizeSlider = document.getElementById('point-size');
+                pointSizeSlider.addEventListener('input', function() {
+                    const value = parseFloat(this.value);
+                    document.getElementById('point-size-value').textContent = value.toFixed(3);
+                    if (modelMesh && modelMesh instanceof THREE.Points) {
+                        modelMesh.material.size = value;
+                        modelMesh.material.needsUpdate = true;
+                        renderScene();
+                    }
+                });
+            }
+            
             // Backface culling toggle
             const backfaceCullingToggle = document.getElementById('toggle-backfaceculling');
             const savedBackfaceCulling = localStorage.getItem('drcViewer-backfaceCulling');
@@ -1004,8 +1193,8 @@
 
             // Collapsible panel setup
             const collapseButton = document.getElementById('toggle-controls-panel-collapse');
-            const controlsContent = document.getElementById('controls-panel-content');
-
+            // Don't reassign controlsContent since it's already defined as a constant above
+            
             if (collapseButton && controlsContent) {
                 const initialCollapsedState = localStorage.getItem('drcViewer-controlsCollapsed') === 'true';
                 if (initialCollapsedState) {

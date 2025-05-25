@@ -12,9 +12,27 @@ let filePathToLoad = null;
 // If opened via protocol handler or .desktop file with %U, it might be different.
 // We'll check for arguments that look like file paths.
 const args = process.argv.slice(app.isPackaged ? 1 : 2); // Adjust slice depending on packaged or dev
-const potentialFileArg = args.find(arg => !arg.startsWith('--') && fs.existsSync(arg) && (arg.toLowerCase().endsWith('.drc') || arg.toLowerCase().endsWith('.glb')));
-if (potentialFileArg) {
-  filePathToLoad = potentialFileArg;
+console.log('Command line arguments:', args);
+
+for (let arg of args) {
+  // Skip arguments that look like flags
+  if (arg.startsWith('--')) continue;
+  
+  // Try to resolve the path (in case it's relative)
+  try {
+    const resolvedPath = path.resolve(arg);
+    console.log('Checking path:', resolvedPath);
+    
+    if (fs.existsSync(resolvedPath) && 
+        (resolvedPath.toLowerCase().endsWith('.drc') || 
+         resolvedPath.toLowerCase().endsWith('.glb'))) {
+      filePathToLoad = resolvedPath;
+      console.log('Found valid file to load:', filePathToLoad);
+      break;
+    }
+  } catch (e) {
+    console.error('Error resolving path:', arg, e);
+  }
 }
 
 
@@ -33,7 +51,8 @@ function createWindow() {
 
   mainWindow.loadFile('index.html');
 
-  // mainWindow.webContents.openDevTools(); // Uncomment for debugging
+  // DevTools can be enabled for debugging if needed
+  // mainWindow.webContents.openDevTools();
 
   mainWindow.on('closed', () => {
     mainWindow = null;
@@ -67,8 +86,24 @@ app.on('activate', () => {
 ipcMain.handle('read-file-content', async (event, filePath) => {
   console.log(`Main process: ipcMain.handle('read-file-content') called with path: ${filePath}`);
   try {
+    // Make sure the path exists
+    if (!fs.existsSync(filePath)) {
+      console.error(`Main process: File does not exist: ${filePath}`);
+      return { success: false, error: `File does not exist: ${filePath}` };
+    }
+    
+    // Check if it's a readable file
+    const stats = fs.statSync(filePath);
+    if (!stats.isFile()) {
+      console.error(`Main process: Path is not a file: ${filePath}`);
+      return { success: false, error: `Path is not a file: ${filePath}` };
+    }
+    
+    // Read the file
+    console.log(`Main process: Reading file: ${filePath} (${stats.size} bytes)`);
     const buffer = fs.readFileSync(filePath);
     console.log(`Main process: Successfully read file '${filePath}', buffer length: ${buffer.length}`);
+    
     return { success: true, data: buffer }; // fs.readFileSync returns a Buffer
   } catch (error) {
     console.error(`Main process: Error reading file content for '${filePath}':`, error);
