@@ -6,6 +6,5 @@ services:
     volumes:
       - ./nginx.conf:/etc/nginx/conf.d/default.conf
       - ./index.html:/usr/share/nginx/html/index.html
-      - ./drc-viewer.svg:/usr/share/nginx/html/drc-viewer.svg
-      - ./drc-viewer.png:/usr/share/nginx/html/drc-viewer.png
+      - ./drc-viewer.svg:/usr/share/nginx/html/drc-icon.svg
       - ./main.js:/usr/share/nginx/html/main.js
