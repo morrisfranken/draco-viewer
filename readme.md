@@ -13,9 +13,9 @@ A web-based and desktop application for viewing Draco (.drc) 3D models, featurin
 *   Collapsible controls panel.
 *   **Electron Desktop Application:**
     *   Provides a standalone viewer.
-    *   Integrates with the Linux desktop environment (via `installers/ubuntu.sh`) to open `.drc` files directly from the file manager.
-    *   Supports opening `.drc` files passed as command-line arguments.
-    *   Drag-and-drop support for `.drc` files onto the application window.
+    *   Integrates with the Linux desktop environment (via `installers/ubuntu.sh`) to open `.drc` and `.glb` files directly from the file manager.
+    *   Supports opening `.drc` or `.glb` files passed as command-line arguments.
+    *   Drag-and-drop support for `.drc` or `.glb` files onto the application window.
 *   **Web Version (via Docker & Nginx):**
     *   Can be served as a web page using Docker and Nginx.
     *   Users can access the viewer through a web browser and use drag-and-drop to load models.
@@ -30,7 +30,7 @@ This provides the best experience for local file viewing and desktop integration
 
 **Prerequisites:**
 *   **Node.js and npm (or yarn):** Required to run Electron and install dependencies. Install from [nodejs.org](https://nodejs.org/) or your distribution's package manager.
-*   **Project Files:** Ensure `main.js`, `preload.js`, `index.html`, `package.json`, and `drc-viewer.png` are in the project directory.
+*   **Project Files:** Ensure `main.js`, `preload.js`, `index.html`, `package.json`, and `drc-icon.svg` are in the project directory.
 
 **Running Manually (Development/Testing):**
 1.  Navigate to the project directory (e.g., `/path/to/your/drc_viewer_project/`):
@@ -50,10 +50,14 @@ This provides the best experience for local file viewing and desktop integration
     ```bash
     npm start -- /path/to/your/model.drc
     ```
+    Or for GLB files:
+    ```bash
+    npm start -- /path/to/your/model.glb
+    ```
     (Note: The `--` separates arguments for `npm start` from arguments for the Electron app).
 
 **Linux Desktop Integration (Ubuntu/Debian-based):**
-The `installers/ubuntu.sh` script sets up desktop integration for `.drc` files to open with the Electron app.
+The `installers/ubuntu.sh` script sets up desktop integration for `.drc` and `.glb` files to open with the Electron app.
 
 1.  **Ensure Prerequisites:** Node.js, npm, and project files are ready as described above.
 2.  **Navigate to the project directory** in your terminal.
@@ -70,17 +74,17 @@ The `installers/ubuntu.sh` script sets up desktop integration for `.drc` files t
     ./installers/ubuntu.sh
     ```
     This script will:
-    *   Copy `drc-viewer.png` to the user's icon theme directory.
+    *   Copy `drc-icon.svg` to the user's icon theme directory.
     *   Create a launcher script for the Electron application.
-    *   Set up a `.desktop` file (for application menu and MIME association) and a custom MIME type for `.drc` files.
+    *   Set up a `.desktop` file (for application menu and MIME association) and custom MIME types for `.drc` and `.glb` files.
     *   Update your user's MIME database and icon cache.
 
-    **Important:** After installation, if the custom icon for `.drc` files or the application menu entry doesn't appear immediately, **you may need to log out and log back in, or restart your computer.**
+    **Important:** After installation, if the custom icon for `.drc` or `.glb` files or the application menu entry doesn't appear immediately, **you may need to log out and log back in, or restart your computer.**
 
 **Using After Installation:**
-*   **From File Manager:** Double-click any `.drc` file.
-*   **From Application Menu:** Search for "DRC Viewer" and launch it.
-*   **Drag and Drop:** Once the application is open, drag and drop `.drc` files onto the window.
+*   **From File Manager:** Double-click any `.drc` or `.glb` file.
+*   **From Application Menu:** Search for "Draco Viewer" and launch it.
+*   **Drag and Drop:** Once the application is open, drag and drop `.drc` or `.glb` files onto the window.
 
 ### 2. Web Version (via Docker & Nginx)
 
@@ -111,17 +115,18 @@ docker-compose down
 ## Uninstallation (Linux Desktop Integration)
 
 To remove the desktop integration and files installed by `installers/ubuntu.sh`:
-1.  Remove the launcher script: `rm -f ~/.local/bin/drc-viewer-launcher` (or the path used by your `ubuntu.sh` if different, e.g., `~/.local/share/drc-viewer/drc-viewer-launcher.sh`).
-2.  Remove the parent directory if it was created specifically for the launcher and is now empty: `rmdir ~/.local/share/drc-viewer` (if applicable).
-3.  Remove the .desktop file: `rm -f ~/.local/share/applications/drc-viewer.desktop`
-4.  Remove the icon file: `rm -f ~/.local/share/icons/hicolor/scalable/apps/drc-viewer.png`
-5.  Remove the MIME type definition: `rm -f ~/.local/share/mime/packages/application-x-drc.xml`
-6.  Update the MIME database: `update-mime-database ~/.local/share/mime`
-7.  Update the icon cache: `gtk-update-icon-cache -f -t ~/.local/share/icons/hicolor`
-8.  (Optional) You can remove the project directory itself (including `node_modules`) if you no longer need the source code or installed dependencies.
+1.  Remove the launcher script: `rm -f ~/.local/share/draco-viewer/draco-viewer-launcher.sh`.
+2.  Remove the parent directory if it was created specifically for the launcher and is now empty: `rmdir --ignore-fail-on-non-empty ~/.local/share/draco-viewer`.
+3.  Remove the .desktop file: `rm -f ~/.local/share/applications/draco-viewer.desktop`
+4.  Remove the icon file: `rm -f ~/.local/share/icons/hicolor/scalable/apps/draco-viewer.svg`
+5.  Remove the .drc MIME type definition: `rm -f ~/.local/share/mime/packages/application-x-drc.xml`
+6.  Remove the .glb MIME type definition: `rm -f ~/.local/share/mime/packages/model-gltf-binary.xml`
+7.  Update the MIME database: `update-mime-database ~/.local/share/mime`
+8.  Update the icon cache: `gtk-update-icon-cache -f -t ~/.local/share/icons/hicolor`
+9.  (Optional) You can remove the project directory itself (including `node_modules`) if you no longer need the source code or installed dependencies.
 
 ## Troubleshooting
-*   **File icons not showing for `.drc` files (Linux):** Log out and log back in, or restart your computer. Ensure `drc-viewer.png` is present in the source directory when `installers/ubuntu.sh` is run.
+*   **File icons not showing for `.drc` or `.glb` files (Linux):** Log out and log back in, or restart your computer. Ensure `drc-icon.svg` is present in the source directory when `installers/ubuntu.sh` is run.
 *   **Electron Application doesn't start:**
     *   Ensure Node.js and npm are installed correctly.
     *   Ensure you have run `npm install` in the project directory.

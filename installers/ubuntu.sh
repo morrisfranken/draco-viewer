@@ -1,14 +1,15 @@
 #!/bin/bash
 
-# Installs DRC Viewer as an Electron application
+# Installs Draco Viewer as an Electron application
 
-INSTALL_DIR="$HOME/.local/share/drc-viewer" # For launcher script & app resources if packaged
-APP_NAME="drc-viewer"
+INSTALL_DIR="$HOME/.local/share/draco-viewer" # For launcher script & app resources if packaged
+APP_NAME="draco-viewer"
 DESKTOP_FILE_NAME="$APP_NAME.desktop"
-MIME_TYPE="application/x-drc"
-MIME_XML_FILE="application-x-drc.xml"
-ICON_NAME="drc-viewer"
-SOURCE_ICON_FILE="drc-viewer.png"
+# MIME_TYPE="application/x-drc" # This variable is not strictly needed as it's used in an array later
+MIME_XML_FILE="application-x-drc.xml" # For application/x-drc
+GLB_MIME_XML_FILE="model-gltf-binary.xml" # For model/gltf-binary
+ICON_NAME="draco-viewer"
+SOURCE_ICON_FILE="drc-icon.svg" # The actual source icon file in the project
 
 SCRIPT_SOURCE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # Adjust ELECTRON_APP_SOURCE_DIR to point to the parent directory of SCRIPT_SOURCE_DIR
@@ -16,16 +17,50 @@ ELECTRON_APP_SOURCE_DIR="$(cd "$SCRIPT_SOURCE_DIR/.." && pwd)"
 
 MIME_TYPES_TO_REGISTER=("application/x-drc" "model/gltf-binary")
 DESKTOP_FILE_MIME_TYPE_STRING="application/x-drc;model/gltf-binary;"
-ICON_NAME="drc-viewer"
-SOURCE_ICON_FILE="drc-viewer.png"
+# ICON_NAME and SOURCE_ICON_FILE already defined above, removing duplicates
+# SCRIPT_SOURCE_DIR and ELECTRON_APP_SOURCE_DIR already defined above, removing duplicates
 
-SCRIPT_SOURCE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# Adjust ELECTRON_APP_SOURCE_DIR to point to the parent directory of SCRIPT_SOURCE_DIR
-ELECTRON_APP_SOURCE_DIR="$(cd "$SCRIPT_SOURCE_DIR/.." && pwd)"
-
-echo "DRC Viewer (Electron) Installer"
+echo "Draco Viewer Installer"
 echo "-------------------------------"
-echo "This script will install the DRC Viewer Electron app for the current user."
+
+# Prerequisite: Check for npm
+if ! command -v npm &> /dev/null; then
+    echo "Error: npm is not installed. Please install Node.js and npm."
+    echo "You can usually install them from your distribution's package manager (e.g., sudo apt install nodejs npm) or from https://nodejs.org/"
+    echo "Installation aborted."
+    exit 1
+fi
+echo "npm found."
+
+# Prerequisite: Check if npm install has been run (presence of node_modules)
+if [ ! -d "$ELECTRON_APP_SOURCE_DIR/node_modules" ]; then
+    echo ""
+    echo "Warning: The 'node_modules' directory was not found in '$ELECTRON_APP_SOURCE_DIR'."
+    echo "This suggests that 'npm install' has not been run for the project."
+    read -p "Do you want to run 'npm install' in '$ELECTRON_APP_SOURCE_DIR' now? (y/N) " choice_npm
+    case "$choice_npm" in
+      y|Y )
+        echo "Running 'npm install' in '$ELECTRON_APP_SOURCE_DIR'..."
+        (cd "$ELECTRON_APP_SOURCE_DIR" && npm install)
+        if [ $? -ne 0 ]; then
+            echo "Error: 'npm install' failed. Please check for errors, run it manually in '$ELECTRON_APP_SOURCE_DIR', and then re-run this installer."
+            echo "Installation aborted."
+            exit 1
+        fi
+        echo "'npm install' completed successfully."
+        ;;
+      * )
+        echo "Please run 'npm install' in '$ELECTRON_APP_SOURCE_DIR' and then re-run this installer."
+        echo "Installation aborted."
+        exit 1
+        ;;
+    esac
+else
+    echo "'node_modules' directory found in '$ELECTRON_APP_SOURCE_DIR'."
+fi
+
+echo ""
+echo "This script will install the Draco Viewer Electron app for the current user."
 echo "It assumes Node.js and npm/yarn are installed, and you have run 'npm install' in:"
 echo "  $ELECTRON_APP_SOURCE_DIR"
 echo ""
@@ -52,10 +87,10 @@ fi
 USER_ICON_DIR="$HOME/.local/share/icons/hicolor/scalable/apps"
 if [ -f "$ELECTRON_APP_SOURCE_DIR/$SOURCE_ICON_FILE" ]; then
     mkdir -p "$USER_ICON_DIR"
-    cp "$ELECTRON_APP_SOURCE_DIR/$SOURCE_ICON_FILE" "$USER_ICON_DIR/$ICON_NAME.png"
-    echo "Copied $SOURCE_ICON_FILE to $USER_ICON_DIR/$ICON_NAME.png"
+    cp "$ELECTRON_APP_SOURCE_DIR/$SOURCE_ICON_FILE" "$USER_ICON_DIR/$ICON_NAME.svg" # Changed to .svg
+    echo "Copied $SOURCE_ICON_FILE to $USER_ICON_DIR/$ICON_NAME.svg"
 else
-    echo "Warning: Icon file $SOURCE_ICON_FILE not found in $ELECTRON_APP_SOURCE_DIR. Generic icon will be used."
+    echo "Warning: Icon file $SOURCE_ICON_FILE not found in $ELECTRON_APP_SOURCE_DIR. No icon will be installed."
 fi
 
 # Create the launcher script for Electron app
@@ -103,7 +138,7 @@ echo "Creating .desktop file at $DESKTOP_FILE_DIR/$DESKTOP_FILE_NAME..."
 cat << EOF > "$DESKTOP_FILE_DIR/$DESKTOP_FILE_NAME"
 [Desktop Entry]
 Version=1.0
-Name=DRC Viewer (Electron)
+Name=Draco Viewer
 Comment=View .drc and .glb 3D models with Electron
 Exec=$LAUNCHER_SCRIPT_PATH %F
 Icon=$ICON_NAME
@@ -134,7 +169,7 @@ echo "MIME type definition for .drc created."
 
 # Create custom MIME type XML for .glb (model/gltf-binary)
 # Note: model/gltf-binary is a standard MIME type, but we ensure it's associated with our app and icon.
-GLB_MIME_XML_FILE="model-gltf-binary.xml"
+GLB_MIME_XML_FILE="model-gltf-binary.xml" # Variable already defined above
 echo "Creating/Updating MIME type definition for .glb at $MIME_PACKAGES_DIR/$GLB_MIME_XML_FILE..."
 cat << EOF > "$MIME_PACKAGES_DIR/$GLB_MIME_XML_FILE"
 <?xml version="1.0" encoding="UTF-8"?>
@@ -193,9 +228,11 @@ echo "This is often necessary for the desktop environment to fully recognize new
 echo ""
 echo "To uninstall (manual steps):"
 echo "  - Remove launcher script: rm -f \"$LAUNCHER_SCRIPT_PATH\""
+echo "  - Remove launcher script directory (if empty): rmdir --ignore-fail-on-non-empty \"$INSTALL_DIR\""
 echo "  - Remove .desktop file: rm -f \"$DESKTOP_FILE_DIR/$DESKTOP_FILE_NAME\""
-echo "  - Remove icon file: rm -f \"$USER_ICON_DIR/$ICON_NAME.png\""
-echo "  - Remove MIME XML: rm -f \"$MIME_PACKAGES_DIR/$MIME_XML_FILE\""
+echo "  - Remove icon file: rm -f \"$USER_ICON_DIR/$ICON_NAME.svg\"" # Changed from .png to .svg
+echo "  - Remove .drc MIME XML: rm -f \"$MIME_PACKAGES_DIR/$MIME_XML_FILE\""
+echo "  - Remove .glb MIME XML: rm -f \"$MIME_PACKAGES_DIR/$GLB_MIME_XML_FILE\"" # Added GLB XML removal
 echo "  - Update MIME database: update-mime-database \"\$HOME/.local/share/mime\""
 echo "  - Update icon cache: gtk-update-icon-cache -f -t \"\$HOME/.local/share/icons/hicolor\""
 echo "  - (Optional) Remove Electron project directory: rm -rf \"$ELECTRON_APP_SOURCE_DIR\" (be careful!)"
