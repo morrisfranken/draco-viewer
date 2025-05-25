@@ -340,6 +340,11 @@
                     </label>
                 </div>
             </div>
+
+            <div class="control-section">
+                <h4>Lighting</h4>
+                <label><input type="checkbox" id="toggle-lighting" checked> Enable Lighting</label>
+            </div>
         </div>
     </div>
     
@@ -731,6 +736,9 @@
                     isElectronLoadingFile = false; // Reset flag
                     hideLoadingIndicator(); // Call this when model is actually ready and processed
 
+                    // Apply current lighting settings
+                    updateLighting();
+
                     if (displayInfo) {
                         currentModelNameSpan.textContent = displayInfo;
                         currentModelNameSpan.title = displayInfo;
@@ -892,6 +900,10 @@
                     
                     isElectronLoadingFile = false;
                     hideLoadingIndicator();
+                    
+                    // FIXED: Apply lighting settings to ensure materials are correct on load
+                    updateLighting();
+                    
                     renderScene();
                 }, 10);
             };
@@ -1022,12 +1034,33 @@
         }
         
         function createModelMaterial() {
-            const material = new THREE.MeshStandardMaterial({
-                color: 0xd1d1d1, // Keep a default color
-                metalness: 0.1,
-                roughness: 0.5,
-                side: document.getElementById('toggle-backfaceculling').checked ? THREE.FrontSide : THREE.DoubleSide
-            });
+            // Check for lighting preference - FIXED: properly handle case when toggle doesn't exist yet
+            const enableLighting = document.getElementById('toggle-lighting') ? 
+                document.getElementById('toggle-lighting').checked : 
+                localStorage.getItem('drcViewer-lighting') !== 'false';
+            
+            // FIXED: Handle case when backface culling toggle doesn't exist yet
+            const side = document.getElementById('toggle-backfaceculling') ?
+                (document.getElementById('toggle-backfaceculling').checked ? THREE.FrontSide : THREE.DoubleSide) :
+                THREE.DoubleSide;
+                
+            let material;
+            
+            if (enableLighting) {
+                // Full lighting and shading with MeshStandardMaterial
+                material = new THREE.MeshStandardMaterial({
+                    color: 0xd1d1d1,
+                    metalness: 0.1,
+                    roughness: 0.5,
+                    side: side
+                });
+            } else {
+                // No lighting with MeshBasicMaterial
+                material = new THREE.MeshBasicMaterial({
+                    color: 0xd1d1d1,
+                    side: side
+                });
+            }
             
             return material;
         }
@@ -1222,11 +1255,117 @@
                 });
             }
 
+            // Add lighting toggle
+            const lightingToggle = document.getElementById('toggle-lighting');
+            const savedLightingState = localStorage.getItem('drcViewer-lighting');
+            if (savedLightingState !== null) {
+                lightingToggle.checked = (savedLightingState === 'true');
+            }
+            lightingToggle.addEventListener('change', updateLighting);
+
             // Initial application of settings if model already exists (e.g. page reload with model)
             if (modelMesh) {
-                updateBackfaceCulling(); 
+                updateBackfaceCulling();
+                updateLighting();
             }
             // updateBackgroundType(); // Called in init after setupUIControls
+        }
+
+        function updateLighting() {
+            const enableLighting = document.getElementById('toggle-lighting').checked;
+            localStorage.setItem('drcViewer-lighting', enableLighting);
+
+            // Toggle scene lights visibility
+            if (ambientLight) ambientLight.visible = enableLighting;
+            if (hemisphereLight) hemisphereLight.visible = enableLighting;
+            if (directionalLight) directionalLight.visible = enableLighting;
+
+            // Update materials if model exists
+            if (modelMesh) {
+                updateMaterialsForModel(enableLighting);
+                renderScene();
+            }
+        }
+        
+        function updateMaterialsForModel(enableLighting) {
+            if (modelMesh instanceof THREE.Mesh) {
+                // For single mesh objects
+                updateMeshMaterial(modelMesh, enableLighting);
+            } else {
+                // For GLB/GLTF models which are hierarchies
+                modelMesh.traverse(child => {
+                    if (child.isMesh) {
+                        updateMeshMaterial(child, enableLighting);
+                    }
+                });
+            }
+        }
+
+        function updateMeshMaterial(mesh, enableLighting) {
+            const currentMaterial = mesh.material;
+            const isFrontSide = currentMaterial.side === THREE.FrontSide;
+            const hasVertexColors = currentMaterial.vertexColors;
+
+            // Store current color/map
+            const color = currentMaterial.color ? currentMaterial.color.clone() : new THREE.Color(0xd1d1d1);
+            const map = currentMaterial.map || null;
+            
+            // Create new material based on lighting preference
+            let newMaterial;
+            
+            if (enableLighting) {
+                // Full lighting and shading with MeshStandardMaterial
+                newMaterial = new THREE.MeshStandardMaterial({
+                    color: color,
+                    map: map,
+                    metalness: 0.1,
+                    roughness: 0.5,
+                    side: isFrontSide ? THREE.FrontSide : THREE.DoubleSide,
+                    vertexColors: hasVertexColors
+                });
+            } else {
+                // No lighting with MeshBasicMaterial
+                newMaterial = new THREE.MeshBasicMaterial({
+                    color: color,
+                    map: map,
+                    side: isFrontSide ? THREE.FrontSide : THREE.DoubleSide,
+                    vertexColors: hasVertexColors
+                });
+            }
+            
+            // If it's an array of materials
+            if (Array.isArray(mesh.material)) {
+                const materials = [];
+                mesh.material.forEach(mat => {
+                    const color = mat.color ? mat.color.clone() : new THREE.Color(0xd1d1d1);
+                    const map = mat.map || null;
+                    const hasVertexColors = mat.vertexColors;
+                    const isFrontSide = mat.side === THREE.FrontSide;
+                    
+                    if (enableLighting) {
+                        materials.push(new THREE.MeshStandardMaterial({
+                            color: color,
+                            map: map,
+                            metalness: 0.1,
+                            roughness: 0.5,
+                            side: isFrontSide ? THREE.FrontSide : THREE.DoubleSide,
+                            vertexColors: hasVertexColors
+                        }));
+                    } else {
+                        materials.push(new THREE.MeshBasicMaterial({
+                            color: color,
+                            map: map,
+                            side: isFrontSide ? THREE.FrontSide : THREE.DoubleSide,
+                            vertexColors: hasVertexColors
+                        }));
+                    }
+                });
+                mesh.material = materials;
+            } else {
+                mesh.material = newMaterial;
+            }
+            
+            mesh.material.needsUpdate = true;
         }
 
         function onWindowResize() {
@@ -1243,6 +1382,16 @@
                      directionalLight.target.updateMatrixWorld();
                 }
             }
+            
+            // Make sure lights are properly enabled/disabled based on settings
+            const enableLighting = document.getElementById('toggle-lighting') ? 
+                document.getElementById('toggle-lighting').checked : 
+                localStorage.getItem('drcViewer-lighting') !== 'false';
+                
+            if (ambientLight) ambientLight.visible = enableLighting;
+            if (hemisphereLight) hemisphereLight.visible = enableLighting;
+            if (directionalLight) directionalLight.visible = enableLighting;
+            
             renderer.render(scene, camera);
         }
 
