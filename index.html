@@ -303,7 +303,7 @@
     </div>
     
     <!-- Drop zone text -->
-    <div id="drop-zone-text">Drop .drc (mesh or point cloud) or .glb file here</div>
+    <div id="drop-zone-text">Drop .drc (mesh or point cloud) or .glb file here (KTX2/ETC1S textures supported)</div>
 
     <!-- Model info container -->
     <div id="model-info-container">
@@ -365,6 +365,7 @@
         import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
         import { RGBELoader } from 'three/addons/loaders/RGBELoader.js'; // Added for HDR
         import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'; // Added for GLB support
+        import { KTX2Loader } from 'three/addons/loaders/KTX2Loader.js'; // Added for KTX2/ETC1S texture support
 
         let scene, camera, renderer, controls, directionalLight, modelMesh, ambientLight, hemisphereLight;
         // let gradientTexture; // Removed gradientTexture
@@ -380,9 +381,14 @@
         dracoLoader.setDecoderPath('https://www.gstatic.com/draco/versioned/decoders/1.5.6/');
         dracoLoader.setDecoderConfig({ type: 'wasm' });
         
-        // Initialize GLTFLoader with DRACOLoader for Draco-encoded GLB files
+        // Initialize KTX2Loader for ETC1S/UASTC texture support
+        const ktx2Loader = new KTX2Loader();
+        ktx2Loader.setTranscoderPath('https://unpkg.com/three@0.160.0/examples/jsm/libs/basis/');
+        
+        // Initialize GLTFLoader with DRACOLoader and KTX2Loader for compressed GLB files
         const gltfLoader = new GLTFLoader();
         gltfLoader.setDRACOLoader(dracoLoader);
+        gltfLoader.setKTX2Loader(ktx2Loader);
 
         let isElectronLoadingFile = false; // Flag for Electron file loading state
         
@@ -417,6 +423,9 @@
             renderer.toneMapping = THREE.ACESFilmicToneMapping; // Added for HDR
             renderer.toneMappingExposure = 1; // Added for HDR
             document.body.appendChild(renderer.domElement);
+
+            // Initialize KTX2Loader with renderer context for texture decompression
+            ktx2Loader.detectSupport(renderer);
 
             // Controls - Fix for sluggish movement
             controls = new OrbitControls(camera, renderer.domElement);
@@ -499,7 +508,7 @@
                     // Show initial message if no model, Electron isn't loading, and HDR isn't loading
                     if (!modelMesh && !isElectronLoadingFile && 
                         (!loadingText.innerHTML || !loadingText.innerHTML.includes('Loading HDR'))) {
-                        updateLoadingProgress('<h3>Welcome to Draco Viewer</h3><p class="supported-formats">Drag & drop your 3D models here to begin.</p><div class="supported-formats">Supported: <span class="format">.drc</span> <span class="format">.glb</span></div><div class="format-info">View Draco compressed meshes, point clouds, and GLB/glTF files with textures.</div>', 0);
+                        updateLoadingProgress('<h3>Welcome to Draco Viewer</h3><p class="supported-formats">Drag & drop your 3D models here to begin.</p><div class="supported-formats">Supported: <span class="format">.drc</span> <span class="format">.glb</span></div><div class="format-info">View Draco compressed meshes, point clouds, and GLB/glTF files with textures (including KTX2/ETC1S).</div>', 0);
                     }
                 }, 300); // Delay to allow other initial processes to set messages
 
@@ -507,7 +516,7 @@
                 // Fallback for non-Electron environment
                 console.warn("Electron API not found. Running in browser mode. Please drag & drop a .drc file.");
                 if (!modelMesh && localStorage.getItem('drcViewer-backgroundType') !== 'hdr') {
-                    updateLoadingProgress('<h3>Welcome to Draco Viewer</h3><p class="supported-formats">Drag & drop your 3D models here to begin.</p><div class="supported-formats">Supported: <span class="format">.drc</span> <span class="format">.glb</span></div><div class="format-info">View Draco compressed meshes, point clouds, and GLB/glTF files with textures.</div>', 0);
+                    updateLoadingProgress('<h3>Welcome to Draco Viewer</h3><p class="supported-formats">Drag & drop your 3D models here to begin.</p><div class="supported-formats">Supported: <span class="format">.drc</span> <span class="format">.glb</span></div><div class="format-info">View Draco compressed meshes, point clouds, and GLB/glTF files with textures (including KTX2/ETC1S).</div>', 0);
                 }
             }
 
@@ -554,7 +563,7 @@
                     // No Electron file loading, and no model.
                     // Show the generic "Drag & drop" prompt, unless HDR is actively loading.
                     if (!loadingText.innerHTML || !loadingText.innerHTML.includes('Loading HDR')) {
-                        updateLoadingProgress('<h3>Welcome to Draco Viewer</h3><p class="supported-formats">Drag & drop your 3D models here to begin.</p><div class="supported-formats">Supported: <span class="format">.drc</span> <span class="format">.glb</span></div><div class="format-info">View Draco compressed meshes, point clouds, and GLB/glTF files with textures.</div>', 0);
+                        updateLoadingProgress('<h3>Welcome to Draco Viewer</h3><p class="supported-formats">Drag & drop your 3D models here to begin.</p><div class="supported-formats">Supported: <span class="format">.drc</span> <span class="format">.glb</span></div><div class="format-info">View Draco compressed meshes, point clouds, and GLB/glTF files with textures (including KTX2/ETC1S).</div>', 0);
                         loadingContainer.style.display = 'block'; // Ensure prompt is visible
                     }
                 }
