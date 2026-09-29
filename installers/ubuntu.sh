@@ -16,7 +16,7 @@ SCRIPT_SOURCE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ELECTRON_APP_SOURCE_DIR="$(cd "$SCRIPT_SOURCE_DIR/.." && pwd)"
 
 MIME_TYPES_TO_REGISTER=("application/x-drc" "model/gltf-binary")
-DESKTOP_FILE_MIME_TYPE_STRING="application/x-drc;model/gltf-binary;"
+DESKTOP_FILE_MIME_TYPE_STRING="application/x-drc;model/gltf-binary;model/obj;"
 # ICON_NAME and SOURCE_ICON_FILE already defined above, removing duplicates
 # SCRIPT_SOURCE_DIR and ELECTRON_APP_SOURCE_DIR already defined above, removing duplicates
 
@@ -121,14 +121,14 @@ cat << EOF > "$DESKTOP_FILE_DIR/$DESKTOP_FILE_NAME"
 [Desktop Entry]
 Version=1.0
 Name=Draco Viewer
-Comment=View Draco point clouds, meshes and .glb models
+Comment=View Draco point clouds, meshes, .glb and textured .obj models
 Exec=$LAUNCHER_SCRIPT_PATH %F
 Icon=$ICON_NAME
 Terminal=false
 Type=Application
 MimeType=$DESKTOP_FILE_MIME_TYPE_STRING
 Categories=Graphics;Viewer;3DGraphics;
-Keywords=3D;model;viewer;draco;drc;glb;gltf;electron;
+Keywords=3D;model;viewer;draco;drc;glb;gltf;obj;electron;
 StartupNotify=false
 EOF
 echo ".desktop file created."
@@ -193,6 +193,14 @@ for MIME_TYPE in "${MIME_TYPES_TO_REGISTER[@]}"; do
         echo "$APP_NAME set as default for $MIME_TYPE."
     fi
 done
+
+# .obj files usually already have an editor associated; only take them over when asked.
+# Draco Viewer is listed under "Open With" either way.
+read -p "Also make Draco Viewer the default for .obj files? (y/N) " choice_obj
+case "$choice_obj" in
+  y|Y ) xdg-mime default "$DESKTOP_FILE_NAME" model/obj && echo "$APP_NAME set as default for model/obj.";;
+  * ) echo "Leaving the default .obj application unchanged.";;
+esac
 
 echo ""
 echo "Electron Installation complete!"

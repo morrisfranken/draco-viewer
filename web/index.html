@@ -17,7 +17,7 @@
     <img class="mark" src="icon.svg" alt="">
     <div class="info-text">
       <div id="title">Draco Viewer</div>
-      <div id="meta">Drop a .drc or .glb file to start</div>
+      <div id="meta">Drop a .drc, .glb or .obj file to start</div>
     </div>
   </header>
 
@@ -27,7 +27,7 @@
         <path d="M24 5 40 14v20L24 43 8 34V14z"/><path d="M24 24 40 14M24 24v19M24 24 8 14" opacity=".55"/>
       </svg>
       <h1>Drop a model to view it</h1>
-      <p>Draco point clouds and meshes (<b>.drc</b>) and glTF binaries (<b>.glb</b>) with Draco geometry and KTX2 textures. Drop several tiles at once to view them together.</p>
+      <p>Draco point clouds and meshes (<b>.drc</b>), glTF binaries (<b>.glb</b>) with Draco and KTX2, and textured <b>.obj</b> files. Drop several files at once to view them together.</p>
       <button id="empty-open" class="primary">Open file…</button>
       <p class="hint">or press <kbd>Ctrl</kbd> <kbd>O</kbd></p>
     </div>
@@ -85,7 +85,7 @@
   <div id="drop-overlay" hidden><div>Drop to open</div></div>
   <div id="toast" role="status" hidden></div>
 
-  <input id="file-input" type="file" accept=".drc,.glb" multiple hidden>
+  <input id="file-input" type="file" accept=".drc,.glb,.obj,.mtl,.jpg,.jpeg,.png,.webp,.bmp,.tga" multiple hidden>
   <script type="module" src="viewer.js"></script>
 </body>
 </html>

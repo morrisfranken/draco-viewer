@@ -3,6 +3,9 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
 import { KTX2Loader } from 'three/addons/loaders/KTX2Loader.js';
+import objWorkerSource from 'worker:./obj-worker.js';
+import { TGALoader } from 'three/addons/loaders/TGALoader.js';
+import { mtllibRefs, normalizeRef, parseMtl, resolveRef } from './obj-refs.js';
 
 const $ = (sel) => document.querySelector(sel);
 const ui = {
@@ -246,9 +249,11 @@ function buildDracoObject(geometry) {
 // KTX2 textures keep their transcoded mip levels in JS memory; once they are on the GPU
 // that copy is dead weight (tens of MB for tiled models).
 function releaseAfterUpload(texture) {
-  if (!texture.isCompressedTexture) return;
+  const bitmap = typeof ImageBitmap !== 'undefined' && texture.image instanceof ImageBitmap;
+  if (!texture.isCompressedTexture && !bitmap) return;
   texture.onUpdate = () => {
-    texture.mipmaps = [];
+    if (bitmap) texture.image.close();
+    else texture.mipmaps = [];
     texture.onUpdate = null;
   };
 }
@@ -274,23 +279,148 @@ function collectStats(object, stats) {
   stats.textures += textures.size;
 }
 
+const MODEL_EXTENSIONS = ['drc', 'glb', 'obj'];
+const extension = (name) => name.split('.').pop().toLowerCase();
+const isModelFile = (name) => MODEL_EXTENSIONS.includes(extension(name));
+
 function sniffType(buffer, name) {
   const magic = new TextDecoder().decode(new Uint8Array(buffer, 0, Math.min(5, buffer.byteLength)));
   if (magic.startsWith('glTF')) return 'glb';
   if (magic === 'DRACO') return 'drc';
-  const ext = name.split('.').pop().toLowerCase();
-  return ext === 'glb' || ext === 'drc' ? ext : null;
+  return isModelFile(name) ? extension(name) : null;
 }
 
-async function parseFile({ name, buffer }) {
+// ---------- OBJ + MTL + textures ----------
+
+async function loadImageTexture(ref, data) {
+  if (extension(ref) === 'tga') {
+    const tga = new TGALoader().parse(data);
+    const texture = new THREE.DataTexture(tga.data, tga.width, tga.height);
+    texture.flipY = tga.flipY;
+    texture.generateMipmaps = true;
+    texture.minFilter = THREE.LinearMipmapLinearFilter;
+    return texture;
+  }
+  // Decoded off the main thread; several textures decode in parallel.
+  const bitmap = await createImageBitmap(new Blob([data]), {
+    imageOrientation: 'flipY', premultiplyAlpha: 'none', colorSpaceConversion: 'none',
+  });
+  const texture = new THREE.Texture(bitmap);
+  texture.flipY = false; // already flipped by createImageBitmap
+  return texture;
+}
+
+async function loadObjTexture(ref, getAsset, missing) {
+  const data = await getAsset(ref);
+  if (!data) { missing.push(ref); return null; }
+  try {
+    const texture = await loadImageTexture(ref, data);
+    texture.colorSpace = THREE.SRGBColorSpace;
+    texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+    texture.needsUpdate = true;
+    return texture;
+  } catch {
+    missing.push(`${ref} (unsupported image)`);
+    return null;
+  }
+}
+
+function objMaterial(object, mtl, texture) {
+  const geometry = object.geometry;
+  const hasColor = !!geometry.attributes.color;
+  if (object.isPoints) {
+    return new THREE.PointsMaterial({
+      size: settings.pointSize, sizeAttenuation: false,
+      vertexColors: hasColor, color: hasColor ? 0xffffff : 0xcfd4dc,
+    });
+  }
+  if (object.isLineSegments) return new THREE.LineBasicMaterial({ vertexColors: hasColor, color: hasColor ? 0xffffff : 0xcfd4dc });
+  const opacity = mtl?.opacity ?? 1;
+  const common = { name: mtl?.name ?? '', transparent: opacity < 1, opacity };
+  // Textured scans look right unlit (like the unlit .glb files); plain geometry gets lighting.
+  if (texture) return new THREE.MeshBasicMaterial({ ...common, map: texture });
+  if (!geometry.attributes.normal) geometry.computeVertexNormals();
+  const color = hasColor ? 0xffffff
+    : mtl?.color?.length === 3 ? new THREE.Color().setRGB(...mtl.color, THREE.SRGBColorSpace) : 0xb9bec6;
+  return new THREE.MeshStandardMaterial({ ...common, color, vertexColors: hasColor, roughness: 0.85, metalness: 0 });
+}
+
+let objWorker = null;
+const objTasks = new Map();
+
+function parseObjInWorker(buffer) {
+  if (!objWorker) {
+    objWorker = new Worker(URL.createObjectURL(new Blob([objWorkerSource], { type: 'text/javascript' })));
+    objWorker.onmessage = ({ data }) => {
+      const task = objTasks.get(data.id);
+      objTasks.delete(data.id);
+      if (data.error) task.reject(new Error(data.error));
+      else task.resolve(data);
+    };
+  }
+  const id = objTasks.size + Math.random();
+  return new Promise((resolve, reject) => {
+    objTasks.set(id, { resolve, reject });
+    objWorker.postMessage({ id, buffer }, [buffer]);
+  });
+}
+
+async function loadMaterialLibrary(lib, getAsset, materials, textures, missing) {
+  const data = await getAsset(lib);
+  if (!data) return missing.push(lib);
+  for (const mtl of Object.values(parseMtl(new TextDecoder().decode(data)))) {
+    if (mtl.map) {
+      mtl.map = resolveRef(lib, mtl.map);
+      if (!textures.has(mtl.map)) textures.set(mtl.map, loadObjTexture(mtl.map, getAsset, missing));
+    }
+    materials[mtl.name] = mtl;
+  }
+}
+
+async function parseObj({ buffer, getAsset = async () => null }) {
+  const missing = [];
+  const materials = {};
+  const textures = new Map(); // ref -> Promise<Texture | null>
+
+  // The mtllib line is normally at the top: start on materials and texture decoding
+  // right away, while the worker parses the OBJ text.
+  const head = new TextDecoder().decode(new Uint8Array(buffer, 0, Math.min(buffer.byteLength, 64 * 1024)));
+  const libs = mtllibRefs(head);
+  const early = Promise.all(libs.map((lib) => loadMaterialLibrary(lib, getAsset, materials, textures, missing)));
+  const parsed = await parseObjInWorker(buffer);
+  await early;
+  const late = parsed.materialLibraries.map(normalizeRef).filter((lib) => !libs.includes(lib));
+  await Promise.all(late.map((lib) => loadMaterialLibrary(lib, getAsset, materials, textures, missing)));
+  const loaded = new Map(await Promise.all([...textures].map(async ([ref, p]) => [ref, await p])));
+
+  const group = new THREE.Group();
+  for (const o of parsed.objects) {
+    const geometry = new THREE.BufferGeometry();
+    for (const [key, a] of Object.entries(o.attributes)) {
+      geometry.setAttribute(key, new THREE.BufferAttribute(a.array, a.itemSize, a.normalized));
+    }
+    for (const g of o.groups) geometry.addGroup(g.start, g.count, g.materialIndex);
+    const Type = o.type === 'points' ? THREE.Points : o.type === 'lines' ? THREE.LineSegments : THREE.Mesh;
+    const object = new Type(geometry);
+    object.name = o.name;
+    const material = (name) => objMaterial(object, materials[name], materials[name]?.map ? loaded.get(materials[name].map) : null);
+    object.material = Array.isArray(o.materials) ? o.materials.map(material) : material(o.materials);
+    group.add(object);
+  }
+  return { object: group, missing };
+}
+
+async function parseFile(file) {
+  const { name, buffer } = file;
   const type = sniffType(buffer, name);
-  if (type === 'glb') return (await gltfLoader.parseAsync(buffer, '')).scene;
+  if (type === 'glb') return { object: (await gltfLoader.parseAsync(buffer, '')).scene, missing: [] };
   if (type === 'drc') {
     const geometry = await new Promise((resolve, reject) =>
       draco.decodeDracoFile(buffer, resolve, null, null, THREE.LinearSRGBColorSpace, reject));
-    return buildDracoObject(geometry).object;
+    return { object: buildDracoObject(geometry).object, missing: [] };
   }
-  throw new Error(`${name}: not a .drc or .glb file`);
+  if (type === 'obj') return parseObj(file);
+  throw new Error(`${name}: not a .drc, .glb or .obj file`);
 }
 
 let loadToken = 0;
@@ -306,8 +436,10 @@ async function loadFiles(files) {
   hideToast();
 
   try {
-    const objects = await Promise.all(files.map(parseFile));
+    const results = await Promise.all(files.map(parseFile));
     if (token !== loadToken) return;
+    const objects = results.map((r) => r.object);
+    const missing = [...new Set(results.flatMap((r) => r.missing))];
 
     clearModel();
     const stats = { points: 0, triangles: 0, vertices: 0, textures: 0 };
@@ -335,8 +467,9 @@ async function loadFiles(files) {
     document.title = `${label} — Draco Viewer`;
     ui.title.textContent = label;
     ui.title.title = files.map((f) => f.name).join('\n');
-    ui.meta.textContent = describe(stats, totalBytes, ms);
+    ui.meta.textContent = describe(stats, totalBytes, ms, files.some((f) => f.transport === 'ssh'));
     ui.empty.hidden = true;
+    if (missing.length) showToast(`Not found: ${missing.slice(0, 4).join(', ')}${missing.length > 4 ? ` and ${missing.length - 4} more` : ''}`);
     document.querySelectorAll('[data-needs-model]').forEach((b) => (b.disabled = false));
   } catch (err) {
     console.error(err);
@@ -348,13 +481,14 @@ async function loadFiles(files) {
 
 const fmt = new Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 1 });
 
-function describe(s, bytes, ms) {
+function describe(s, bytes, ms, viaSsh) {
   const parts = [];
   if (s.points) parts.push(`${fmt.format(s.points)} points`);
   if (s.triangles) parts.push(`${fmt.format(s.triangles)} triangles`);
   if (s.triangles) parts.push(`${fmt.format(s.vertices - s.points)} vertices`);
   if (s.textures) parts.push(`${s.textures} texture${s.textures > 1 ? 's' : ''}`);
   parts.push(bytes > 1e6 ? `${(bytes / 1e6).toFixed(1)} MB` : `${Math.ceil(bytes / 1e3)} KB`);
+  if (viaSsh) parts.push('via SSH');
   parts.push(`${ms < 1000 ? Math.round(ms) + ' ms' : (ms / 1000).toFixed(1) + ' s'}`);
   return parts.join('  ·  ');
 }
@@ -387,12 +521,31 @@ function setBackground(bg) {
 
 // ---------- File input: picker, drag & drop, URL, Electron ----------
 
+/** Files read by the Electron main process: OBJ assets come along, already read. */
+function fromElectron({ files, errors }) {
+  errors.forEach(showToast);
+  return files.map((f) => {
+    const assets = new Map((f.assets || []).map((a) => [a.ref, toArrayBuffer(a.data)]));
+    return { name: f.name, buffer: toArrayBuffer(f.data), transport: f.transport, getAsset: async (ref) => assets.get(ref) ?? null };
+  });
+}
+
 async function loadFileList(fileList) {
   const list = [...fileList];
-  if (!list.length) return;
-  setLoading(`Reading ${list.length === 1 ? list[0].name : list.length + ' files'}…`);
-  const files = await Promise.all(list.map(async (f) => ({ name: f.name, buffer: await f.arrayBuffer() })));
-  loadFiles(files);
+  const models = list.filter((f) => isModelFile(f.name));
+  if (!models.length) return showToast('Open a .drc, .glb or .obj file.');
+  setLoading(`Reading ${models.length === 1 ? models[0].name : models.length + ' files'}…`);
+
+  // Electron: let the main process read by path, so an OBJ's MTL and textures are found
+  // next to it even when only the .obj was dropped.
+  const electron = window.electronAPI;
+  const paths = electron ? models.map((f) => electron.pathForFile(f)) : [];
+  if (electron && paths.every(Boolean)) return loadFiles(fromElectron(await electron.readFiles(paths)));
+
+  // Browser: an OBJ's MTL and textures must be part of the same drop / selection.
+  const byName = new Map(list.map((f) => [f.name.toLowerCase(), f]));
+  const getAsset = async (ref) => byName.get(ref.split('/').pop().toLowerCase())?.arrayBuffer() ?? null;
+  loadFiles(await Promise.all(models.map(async (f) => ({ name: f.name, buffer: await f.arrayBuffer(), getAsset }))));
 }
 
 ui.fileInput.addEventListener('change', () => {
@@ -423,7 +576,9 @@ async function loadFromUrls(urls) {
     const files = await Promise.all(urls.map(async (url) => {
       const res = await fetch(url);
       if (!res.ok) throw new Error(`${url}: HTTP ${res.status}`);
-      return { name: decodeURIComponent(new URL(url, location.href).pathname.split('/').pop()), buffer: await res.arrayBuffer() };
+      const base = new URL(url, location.href);
+      const getAsset = (ref) => fetch(new URL(ref, base)).then((r) => (r.ok ? r.arrayBuffer() : null), () => null);
+      return { name: decodeURIComponent(base.pathname.split('/').pop()), buffer: await res.arrayBuffer(), getAsset };
     }));
     loadFiles(files);
   } catch (err) {
@@ -443,9 +598,8 @@ async function start() {
   const urls = params.getAll('model');
   if (initialFiles) {
     setLoading('Reading file…');
-    const { files, errors } = await initialFiles;
-    errors.forEach(showToast);
-    if (files.length) return loadFiles(files.map((f) => ({ name: f.name, buffer: toArrayBuffer(f.data) })));
+    const files = fromElectron(await initialFiles);
+    if (files.length) return loadFiles(files);
     setLoading(null);
   } else if (urls.length) {
     return loadFromUrls(urls);

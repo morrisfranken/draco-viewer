@@ -15,8 +15,41 @@ for (const f of ['draco_decoder.wasm', 'draco_wasm_wrapper.js']) cpSync(`${three
 cpSync(`${three}/basis/basis_transcoder.js`, 'dist/libs/basis/basis_transcoder.js');
 cpSync(`${three}/basis/basis_transcoder.wasm`, 'dist/libs/basis/basis_transcoder.wasm');
 
+// `import source from 'worker:./file.js'` bundles that file as a worker and inlines it as
+// a string (started from a Blob URL, which works both on file:// and on a web server).
+// Workers only need three's core classes; resolving 'three' to the tree-shakeable sources
+// (instead of the prebuilt bundle, renderer included) keeps them small.
+const threeCore = {
+  name: 'three-core',
+  setup(build) {
+    build.onResolve({ filter: /^three$/ }, () => ({ path: new URL('node_modules/three/src/Three.Core.js', import.meta.url).pathname }));
+  },
+};
+
+const inlineWorker = {
+  name: 'inline-worker',
+  setup(build) {
+    build.onResolve({ filter: /^worker:/ }, (args) => ({
+      path: new URL(args.path.slice(7), `file://${args.resolveDir}/`).pathname,
+      namespace: 'worker',
+    }));
+    build.onLoad({ filter: /.*/, namespace: 'worker' }, async (args) => {
+      const result = await esbuild.build({
+        entryPoints: [args.path], bundle: true, format: 'iife', target: 'es2022',
+        minify: !watch, write: false, metafile: true, plugins: [threeCore],
+      });
+      return {
+        contents: `export default ${JSON.stringify(result.outputFiles[0].text)};`,
+        loader: 'js',
+        watchFiles: Object.keys(result.metafile.inputs),
+      };
+    });
+  },
+};
+
 const options = {
   entryPoints: ['web/main.js'],
+  plugins: [inlineWorker],
   bundle: true,
   format: 'esm',
   target: 'es2022',
