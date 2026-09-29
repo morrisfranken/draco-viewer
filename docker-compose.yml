@@ -1,6 +1,7 @@
 services:
   nginx:
     image: nginx:alpine
+    restart: unless-stopped
     ports:
       - "54080:80"
     volumes:
@@ -8,3 +9,7 @@ services:
       - ./index.html:/usr/share/nginx/html/index.html
       - ./drc-viewer.svg:/usr/share/nginx/html/drc-icon.svg
       - ./main.js:/usr/share/nginx/html/main.js
+    deploy:
+      resources:
+        limits:
+          memory: 2G
