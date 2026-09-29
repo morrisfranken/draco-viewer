@@ -59,6 +59,12 @@ else
     echo "'node_modules' directory found in '$ELECTRON_APP_SOURCE_DIR'."
 fi
 
+# The viewer UI is bundled into dist/ (normally done automatically by 'npm install').
+if [ ! -f "$ELECTRON_APP_SOURCE_DIR/dist/index.html" ]; then
+    echo "Building viewer bundle..."
+    (cd "$ELECTRON_APP_SOURCE_DIR" && npm run build) || { echo "Error: 'npm run build' failed."; exit 1; }
+fi
+
 echo ""
 echo "This script will install the Draco Viewer Electron app for the current user."
 echo "It assumes Node.js and npm/yarn are installed, and you have run 'npm install' in:"
@@ -100,33 +106,9 @@ LAUNCHER_SCRIPT_PATH="$INSTALL_DIR/${APP_NAME}-launcher.sh"
 echo "Creating Electron launcher script at $LAUNCHER_SCRIPT_PATH..."
 cat << EOF > "$LAUNCHER_SCRIPT_PATH"
 #!/bin/bash
-# Launcher for DRC Viewer Electron App
-
-# Path to your Electron app's source directory (where package.json, main.js are)
-APP_SOURCE_DIR="$ELECTRON_APP_SOURCE_DIR"
-
-# Check if Electron is available
-if ! command -v electron &> /dev/null; then
-    echo "Electron command not found. Please ensure Electron is installed globally or accessible in PATH."
-    # Try to find it in local node_modules as a fallback for development
-    if [ -f "\$APP_SOURCE_DIR/node_modules/.bin/electron" ]; then
-        ELECTRON_CMD="\$APP_SOURCE_DIR/node_modules/.bin/electron"
-    else
-        # zenity --error --text="Electron is not installed or not found in PATH." & # Optional GUI error
-        exit 1
-    fi
-else
-    ELECTRON_CMD="electron"
-fi
-
-FILE_ARG="\$1" # The file path passed by the .desktop file (%U or %f)
-
-# Navigate to the app's source directory and run Electron
-# The '--' ensures that \$FILE_ARG is treated as an argument to your app, not to Electron itself.
-cd "\$APP_SOURCE_DIR"
-\$ELECTRON_CMD . -- "\$FILE_ARG" &> /dev/null
-
-exit 0
+# Launcher for Draco Viewer. Runs the Electron binary directly (skipping the node shim
+# in node_modules/.bin saves startup time) and passes all selected files.
+exec "$ELECTRON_APP_SOURCE_DIR/node_modules/electron/dist/electron" "$ELECTRON_APP_SOURCE_DIR" "\$@" &> /dev/null
 EOF
 chmod +x "$LAUNCHER_SCRIPT_PATH"
 echo "Electron launcher script created and made executable."
@@ -139,7 +121,7 @@ cat << EOF > "$DESKTOP_FILE_DIR/$DESKTOP_FILE_NAME"
 [Desktop Entry]
 Version=1.0
 Name=Draco Viewer
-Comment=View .drc and .glb 3D models with Electron
+Comment=View Draco point clouds, meshes and .glb models
 Exec=$LAUNCHER_SCRIPT_PATH %F
 Icon=$ICON_NAME
 Terminal=false

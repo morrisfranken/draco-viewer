@@ -1,21 +1,27 @@
 {
   "name": "drc-viewer",
   "version": "1.0.0",
-  "description": "A Draco (.drc) 3D model viewer",
+  "description": "Fast viewer for Draco (.drc) point clouds/meshes and .glb files with Draco + KTX2",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "build": "node build.mjs",
+    "dev": "node build.mjs --watch",
+    "prepare": "node build.mjs"
   },
   "keywords": [
     "draco",
+    "ktx2",
+    "glb",
     "3d",
     "viewer",
     "electron"
   ],
-  "author": "Your Name",
+  "author": "Morris Franken",
   "license": "MIT",
   "devDependencies": {
-    "electron": "^28.0.0"
+    "electron": "^44.4.5",
+    "esbuild": "^0.28.2",
+    "three": "0.186.1"
   }
 }

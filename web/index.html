@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Draco Viewer</title>
+  <link rel="icon" href="icon.svg">
+  <link rel="stylesheet" href="style.css">
+  <link rel="modulepreload" href="viewer.js">
+</head>
+<body data-bg="dark">
+  <canvas id="viewport"></canvas>
+
+  <div id="progress" hidden><div></div></div>
+
+  <header id="info" class="panel">
+    <img class="mark" src="icon.svg" alt="">
+    <div class="info-text">
+      <div id="title">Draco Viewer</div>
+      <div id="meta">Drop a .drc or .glb file to start</div>
+    </div>
+  </header>
+
+  <section id="empty">
+    <div class="empty-card">
+      <svg class="empty-icon" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round">
+        <path d="M24 5 40 14v20L24 43 8 34V14z"/><path d="M24 24 40 14M24 24v19M24 24 8 14" opacity=".55"/>
+      </svg>
+      <h1>Drop a model to view it</h1>
+      <p>Draco point clouds and meshes (<b>.drc</b>) and glTF binaries (<b>.glb</b>) with Draco geometry and KTX2 textures. Drop several tiles at once to view them together.</p>
+      <button id="empty-open" class="primary">Open file…</button>
+      <p class="hint">or press <kbd>Ctrl</kbd> <kbd>O</kbd></p>
+    </div>
+  </section>
+
+  <div id="loading" hidden>
+    <div class="spinner"></div>
+    <div id="loading-text">Loading…</div>
+  </div>
+
+  <nav id="toolbar" class="panel" aria-label="Viewer tools">
+    <button data-action="open" title="Open file (O)">
+      <svg viewBox="0 0 24 24"><path d="M3 7.5A1.5 1.5 0 0 1 4.5 6H9l2 2h8.5A1.5 1.5 0 0 1 21 9.5v8a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 17.5z"/></svg>
+    </button>
+    <button data-action="fit" title="Frame model (F)" data-needs-model>
+      <svg viewBox="0 0 24 24"><path d="M4 9V5.5A1.5 1.5 0 0 1 5.5 4H9M15 4h3.5A1.5 1.5 0 0 1 20 5.5V9M20 15v3.5a1.5 1.5 0 0 1-1.5 1.5H15M9 20H5.5A1.5 1.5 0 0 1 4 18.5V15"/><circle cx="12" cy="12" r="2.5"/></svg>
+    </button>
+    <span class="sep"></span>
+    <button data-action="cull" title="Backface culling (B)" aria-pressed="false">
+      <svg viewBox="0 0 24 24"><path d="M12 3.5 19.5 8v8L12 20.5 4.5 16V8z"/><path d="M12 12l7.5-4M12 12v8.5M12 12 4.5 8" class="back"/></svg>
+      <span class="label">Culling</span>
+    </button>
+    <label class="point-size" title="Point size ([ and ])" hidden>
+      <svg viewBox="0 0 24 24"><circle cx="6" cy="16" r="1.5"/><circle cx="12" cy="12" r="2.5"/><circle cx="18" cy="7" r="3.5"/></svg>
+      <input id="point-size" type="range" min="1" max="12" step="0.5" value="2">
+      <output id="point-size-value">2</output>
+    </label>
+    <span class="sep"></span>
+    <button data-action="background" title="Background (G)">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 3.5a8.5 8.5 0 0 1 0 17z" class="fill"/></svg>
+    </button>
+    <button data-action="fullscreen" title="Fullscreen (F11)">
+      <svg viewBox="0 0 24 24"><path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5"/></svg>
+    </button>
+    <button data-action="help" title="Controls (?)">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6v.3"/><circle cx="12" cy="16.8" r=".4" class="fill"/></svg>
+    </button>
+  </nav>
+
+  <aside id="help" class="panel" hidden>
+    <h2>Controls</h2>
+    <dl>
+      <dt>Rotate</dt><dd>Left drag</dd>
+      <dt>Pan</dt><dd>Right drag · Shift + drag</dd>
+      <dt>Zoom</dt><dd>Scroll (towards cursor)</dd>
+      <dt>Set pivot</dt><dd>Double-click surface</dd>
+      <dt>Frame model</dt><dd><kbd>F</kbd> · double-click empty space</dd>
+      <dt>Open file</dt><dd><kbd>O</kbd></dd>
+      <dt>Backface culling</dt><dd><kbd>B</kbd></dd>
+      <dt>Point size</dt><dd><kbd>[</kbd> <kbd>]</kbd></dd>
+      <dt>Background</dt><dd><kbd>G</kbd></dd>
+    </dl>
+  </aside>
+
+  <div id="drop-overlay" hidden><div>Drop to open</div></div>
+  <div id="toast" role="status" hidden></div>
+
+  <input id="file-input" type="file" accept=".drc,.glb" multiple hidden>
+  <script type="module" src="viewer.js"></script>
+</body>
+</html>

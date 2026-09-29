@@ -1,137 +1,78 @@
-# DRC Model Viewer
+# Draco Viewer
 
-A web-based and desktop application for viewing Draco (.drc) 3D models, featuring dynamic lighting, basic viewing controls, and settings persistence.
+A small, fast viewer for Draco-compressed 3D data:
 
-## Features
+* **`.drc`**: Draco point clouds (with vertex colors) and meshes
+* **`.glb`**: glTF binaries with Draco geometry (`KHR_draco_mesh_compression`), KTX2/Basis textures (`KHR_texture_basisu`) and unlit materials (`KHR_materials_unlit`)
 
-*   Loads and displays `.drc` (Draco compressed) 3D models.
-*   Basic orbital camera controls (zoom, pan, rotate).
-*   Dynamic lighting that follows the camera.
-*   Adjustable background (Solid Color or HDR environment map).
-*   Togglable backface culling.
-*   User settings (background choice, culling) persisted in `localStorage`.
-*   Collapsible controls panel.
-*   **Electron Desktop Application:**
-    *   Provides a standalone viewer.
-    *   Integrates with the Linux desktop environment (via `installers/ubuntu.sh`) to open `.drc` and `.glb` files directly from the file manager.
-    *   Supports opening `.drc` or `.glb` files passed as command-line arguments.
-    *   Drag-and-drop support for `.drc` or `.glb` files onto the application window.
-*   **Web Version (via Docker & Nginx):**
-    *   Can be served as a web page using Docker and Nginx.
-    *   Users can access the viewer through a web browser and use drag-and-drop to load models.
+Select or drop several files at once to view them together in one scene (e.g. tiles, or a mesh with its point cloud).
 
-## Running the Viewer
+It runs as an Electron desktop app (double-click files in the file manager) and as a static web page. Everything, including the Draco decoder and Basis transcoder, is bundled locally, so it needs no network access.
 
-There are two main ways to run the DRC Viewer:
+## Controls
 
-### 1. Electron Desktop Application (Recommended for Desktop Use)
+| Action | Input |
+| --- | --- |
+| Rotate | Left drag |
+| Pan | Right drag, or Shift + drag |
+| Zoom | Scroll (zooms towards the cursor) |
+| Set orbit pivot | Double-click on the model |
+| Frame model | `F`, or double-click the background |
+| Open file | `O` / `Ctrl+O`, or drag & drop |
+| Backface culling | `B` |
+| Point size (point clouds) | `[` / `]` or the slider |
+| Background (dark / gray / light) | `G` |
+| Fullscreen | `F11` |
+| Developer tools (Electron) | `F12` |
 
-This provides the best experience for local file viewing and desktop integration.
+Culling, background and point size are remembered between sessions.
 
-**Prerequisites:**
-*   **Node.js and npm (or yarn):** Required to run Electron and install dependencies. Install from [nodejs.org](https://nodejs.org/) or your distribution's package manager.
-*   **Project Files:** Ensure `main.js`, `preload.js`, `index.html`, `package.json`, and `drc-icon.svg` are in the project directory.
+## Setup
 
-**Running Manually (Development/Testing):**
-1.  Navigate to the project directory (e.g., `/path/to/your/drc_viewer_project/`):
-    ```bash
-    cd /path/to/your/drc_viewer_project
-    ```
-2.  Install dependencies:
-    ```bash
-    npm install
-    ```
-    This downloads Electron and other packages into a `node_modules` folder.
-3.  Run the app:
-    ```bash
-    npm start
-    ```
-4.  To open a specific file directly from the terminal:
-    ```bash
-    npm start -- /path/to/your/model.drc
-    ```
-    Or for GLB files:
-    ```bash
-    npm start -- /path/to/your/model.glb
-    ```
-    (Note: The `--` separates arguments for `npm start` from arguments for the Electron app).
+Requires Node.js and npm.
 
-**Linux Desktop Integration (Ubuntu/Debian-based):**
-The `installers/ubuntu.sh` script sets up desktop integration for `.drc` and `.glb` files to open with the Electron app.
-
-1.  **Ensure Prerequisites:** Node.js, npm, and project files are ready as described above.
-2.  **Navigate to the project directory** in your terminal.
-3.  **Install Node.js Dependencies** (if not already done):
-    ```bash
-    npm install
-    ```
-4.  **Make the installer executable**:
-    ```bash
-    chmod +x installers/ubuntu.sh
-    ```
-5.  **Run the installation script**:
-    ```bash
-    ./installers/ubuntu.sh
-    ```
-    This script will:
-    *   Copy `drc-icon.svg` to the user's icon theme directory.
-    *   Create a launcher script for the Electron application.
-    *   Set up a `.desktop` file (for application menu and MIME association) and custom MIME types for `.drc` and `.glb` files.
-    *   Update your user's MIME database and icon cache.
-
-    **Important:** After installation, if the custom icon for `.drc` or `.glb` files or the application menu entry doesn't appear immediately, **you may need to log out and log back in, or restart your computer.**
-
-**Using After Installation:**
-*   **From File Manager:** Double-click any `.drc` or `.glb` file.
-*   **From Application Menu:** Search for "Draco Viewer" and launch it.
-*   **Drag and Drop:** Once the application is open, drag and drop `.drc` or `.glb` files onto the window.
-
-### 2. Web Version (via Docker & Nginx)
-
-This method is suitable for serving the viewer as a web page, accessible via a browser. It does not provide direct desktop file association.
-
-**Prerequisites:**
-*   **Docker and Docker Compose:** Install from [docker.com](https://www.docker.com/get-started).
-*   **Project Files:** Ensure `Dockerfile`, `docker-compose.yml`, `nginx.conf`, and `index.html` (and its resources like `royal_esplanade_1k.hdr`) are in the project directory.
-
-**Setup and Running:**
-1.  **Navigate to the project directory** in your terminal.
-2.  **Build and run the Docker container using Docker Compose:**
-    ```bash
-    docker-compose up -d
-    ```
-    This command will:
-    *   Build the Docker image based on `Dockerfile` (which uses Nginx to serve `index.html`).
-    *   Start a container in detached mode (`-d`).
-3.  **Access the viewer:**
-    Open your web browser and navigate to `http://localhost:8080` (or the port configured in `docker-compose.yml` and `nginx.conf`).
-4.  **Load models:** Use the drag-and-drop functionality in the browser.
-
-**Stopping the Docker Container:**
 ```bash
-docker-compose down
+npm install        # installs Electron, three.js, esbuild and builds dist/
+npm start -- data/examples/3GJ8D_199_0.glb
 ```
 
-## Uninstallation (Linux Desktop Integration)
+`npm run build` rebuilds `dist/` after changing anything in `web/`, and `npm run dev` rebuilds on every change.
 
-To remove the desktop integration and files installed by `installers/ubuntu.sh`:
-1.  Remove the launcher script: `rm -f ~/.local/share/draco-viewer/draco-viewer-launcher.sh`.
-2.  Remove the parent directory if it was created specifically for the launcher and is now empty: `rmdir --ignore-fail-on-non-empty ~/.local/share/draco-viewer`.
-3.  Remove the .desktop file: `rm -f ~/.local/share/applications/draco-viewer.desktop`
-4.  Remove the icon file: `rm -f ~/.local/share/icons/hicolor/scalable/apps/draco-viewer.svg`
-5.  Remove the .drc MIME type definition: `rm -f ~/.local/share/mime/packages/application-x-drc.xml`
-6.  Remove the .glb MIME type definition: `rm -f ~/.local/share/mime/packages/model-gltf-binary.xml`
-7.  Update the MIME database: `update-mime-database ~/.local/share/mime`
-8.  Update the icon cache: `gtk-update-icon-cache -f -t ~/.local/share/icons/hicolor`
-9.  (Optional) You can remove the project directory itself (including `node_modules`) if you no longer need the source code or installed dependencies.
+### Desktop integration (Ubuntu / Debian)
 
-## Troubleshooting
-*   **File icons not showing for `.drc` or `.glb` files (Linux):** Log out and log back in, or restart your computer. Ensure `drc-icon.svg` is present in the source directory when `installers/ubuntu.sh` is run.
-*   **Electron Application doesn't start:**
-    *   Ensure Node.js and npm are installed correctly.
-    *   Ensure you have run `npm install` in the project directory.
-    *   Check for errors in the terminal when running `npm start`.
-*   **Docker version issues:**
-    *   Ensure `docker-compose up -d` completes without errors.
-    *   Check container logs: `docker-compose logs -f`
-    *   Ensure Nginx is configured correctly in `nginx.conf` and that `index.html` is being served from the correct location within the container (see `Dockerfile`).
+```bash
+./installers/ubuntu.sh
+```
+
+This registers the app for `.drc` and `.glb` files (desktop entry, MIME types, icon). If the file icons don't show up right away, log out and back in.
+
+Opening another file while the viewer is running opens a new window in the existing process, which is faster than a cold start.
+
+### Web version
+
+```bash
+npm run build
+docker compose up -d   # http://localhost:54080
+```
+
+Models can be dropped onto the page, or passed in the URL: `?model=path/to/file.glb` (repeat `model=` to load several files).
+
+## Project layout
+
+| Path | Purpose |
+| --- | --- |
+| `web/` | Viewer source (`index.html`, `style.css`, `main.js`) |
+| `build.mjs` | Bundles `web/main.js` with three.js via esbuild and copies the decoders into `dist/` |
+| `main.js`, `preload.js` | Electron shell: window creation, command-line files, single instance |
+| `installers/ubuntu.sh` | Linux desktop integration |
+
+## Uninstall (Linux desktop integration)
+
+```bash
+rm -rf ~/.local/share/draco-viewer
+rm -f ~/.local/share/applications/draco-viewer.desktop
+rm -f ~/.local/share/icons/hicolor/scalable/apps/draco-viewer.svg
+rm -f ~/.local/share/mime/packages/application-x-drc.xml ~/.local/share/mime/packages/model-gltf-binary.xml
+update-mime-database ~/.local/share/mime
+gtk-update-icon-cache -f -t ~/.local/share/icons/hicolor
+```
