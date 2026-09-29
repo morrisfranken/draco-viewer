@@ -1,10 +1,8 @@
 .git
-.gitignore
+.claude
 node_modules
-package-lock.json
-Dockerfile
-docker-compose.yml
-nginx.conf
-start.sh
-installers/
-readme.md
+dist
+data
+installers
+*.md
+index (copy).html

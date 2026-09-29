@@ -1,9 +1,12 @@
-# Web version: serves the bundled viewer (run `npm install` or `npm run build` first to create dist/).
+# Web version: builds the viewer inside Docker (no Node.js needed on the host).
+#   docker compose up -d --build
 services:
   nginx:
-    image: nginx:alpine
+    build: .
+    restart: unless-stopped
     ports:
       - "54080:80"
-    volumes:
-      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
-      - ./dist:/usr/share/nginx/html:ro
+    deploy:
+      resources:
+        limits:
+          memory: 2G

@@ -51,9 +51,10 @@ Opening another file while the viewer is running opens a new window in the exist
 ### Web version
 
 ```bash
-npm run build
-docker compose up -d   # http://localhost:54080
+docker compose up -d --build   # http://localhost:54080
 ```
+
+The image builds the viewer itself (multi-stage `Dockerfile`), so the host only needs Docker. To update a server: `git pull && docker compose up -d --build`.
 
 Models can be dropped onto the page, or passed in the URL: `?model=path/to/file.glb` (repeat `model=` to load several files).
 
