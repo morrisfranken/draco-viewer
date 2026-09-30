@@ -55,8 +55,18 @@ function parseMtl(text) {
     else if (!current) continue;
     else if (key === 'kd') current.color = value.split(/\s+/).slice(0, 3).map(Number);
     else if (key === 'map_kd') current.map = normalizeRef(mapFileName(value));
-    else if (key === 'd') current.opacity = Number(value);
-    else if (key === 'tr') current.opacity = 1 - Number(value);
+    else if (key === 'd') current.d = Number(value);
+    else if (key === 'tr') current.tr = Number(value);
+  }
+  for (const m of Object.values(materials)) {
+    // 'd' is opacity. 'Tr' should be transparency (1 - d), but many exporters write it as
+    // opacity ("Tr 1" on opaque materials), so only trust it strictly between 0 and 1.
+    // A fully transparent material is never what anyone wants to see: treat it as opaque.
+    let opacity = Number.isFinite(m.d) ? m.d : m.tr > 0 && m.tr < 1 ? 1 - m.tr : 1;
+    if (!(opacity > 0)) opacity = 1;
+    m.opacity = Math.min(opacity, 1);
+    delete m.d;
+    delete m.tr;
   }
   return materials;
 }
